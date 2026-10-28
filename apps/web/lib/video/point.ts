@@ -8,6 +8,7 @@ export function containedImageRect(
   intrinsicHeight: number,
 ): Rectangle | null {
   if (
+    ![container.left, container.top, container.width, container.height, intrinsicWidth, intrinsicHeight].every(Number.isFinite) ||
     container.width <= 0 ||
     container.height <= 0 ||
     intrinsicWidth <= 0 ||
@@ -35,7 +36,7 @@ export function normalizePointInContainedImage(
   intrinsicHeight: number,
 ): NormalizedPoint | null {
   const image = containedImageRect(container, intrinsicWidth, intrinsicHeight);
-  if (image === null) return null;
+  if (image === null || !Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
 
   const x = (clientX - image.left) / image.width;
   const y = (clientY - image.top) / image.height;

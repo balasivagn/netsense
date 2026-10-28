@@ -21,3 +21,10 @@ describe("normalizePointInContainedImage", () => {
     expect(containedImageRect({ left: 0, top: 0, width: 200, height: 100 }, 200, 100)).toEqual({ left: 0, top: 0, width: 200, height: 100 });
   });
 });
+
+it("rejects non-finite pointer and image measurements", () => {
+  const rect = { left: 0, top: 0, width: 200, height: 100 };
+  expect(normalizePointInContainedImage(NaN, 50, rect, 200, 100)).toBeNull();
+  expect(containedImageRect(rect, Infinity, 100)).toBeNull();
+  expect(containedImageRect({ ...rect, left: NaN }, 200, 100)).toBeNull();
+});

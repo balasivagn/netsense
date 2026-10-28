@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { grabFrame, type GrabbedFrame } from "../../lib/video/grab-frame";
 import type { NormalizedPoint } from "../../lib/video/point";
 import { FrameScrubber, type SelectionFrame } from "./frame-scrubber";
@@ -34,71 +34,54 @@ export function SubjectPicker({
   onRetake,
   onRequestPickAfterUpload,
 }: SubjectPickerProps) {
-  const [frameMs, setFrameMs] = useState(0);
-  const [localFrame, setLocalFrame] = useState<GrabbedFrame | null>(null);
-  const [decodeFailed, setDecodeFailed] = useState(false);
-  const [point, setPoint] = useState<NormalizedPoint | null>(null);
-  const requestedFallbackFor = useRef<File | null>(null);
-
-  const remoteFrame = selectionFrames?.find((frame) => frame.ms === frameMs) ?? selectionFrames?.[0];
+  const [request, setRequest] = useState<{ file: File | null | undefined; ms: number }>({ file, ms: 0 });
+  const [decoded, setDecoded] = useState<{ file: File; requestedMs: number; frame: GrabbedFrame } | null>(null);
+  const [failedFile, setFailedFile] = useState<File | null>(null);
+  const [selection, setSelection] = useState<{
+    file: File | null | undefined; url: string; ms: number; point: NormalizedPoint;
+  } | null>(null);
+  const frameMs = request.file === file ? request.ms : 0;
+  const decodeFailed = !!file && failedFile === file;
   const usingRemoteFrame = decodeFailed || !file;
+  const remoteFrame = selectionFrames?.find((frame) => frame.ms === frameMs) ?? selectionFrames?.[0];
+  const localFrame = decoded?.file === file && decoded?.requestedMs === frameMs ? decoded.frame : null;
+  const displayedFrame = usingRemoteFrame ? remoteFrame ?? null : localFrame;
   const activeFrameMs = usingRemoteFrame ? remoteFrame?.ms : localFrame?.frameMs;
-  const displayedFrame = usingRemoteFrame && remoteFrame
-    ? { url: remoteFrame.url }
-    : localFrame
-      ? { url: localFrame.url, width: localFrame.width, height: localFrame.height }
-      : null;
+  const point = selection !== null && selection.file === file && selection?.url === displayedFrame?.url && selection?.ms === activeFrameMs
+    ? selection.point : null;
 
   useEffect(() => {
-    if (!file) {
-      setLocalFrame(null);
-      setDecodeFailed(false);
-      setPoint(null);
-      return;
-    }
+    if (!file || decodeFailed) return;
     const controller = new AbortController();
-    setPoint(null);
-    setDecodeFailed(false);
     void grabFrame(file, frameMs, { signal: controller.signal })
       .then((frame) => {
-        if (!controller.signal.aborted) {
-          setLocalFrame(frame);
-          setFrameMs(frame.frameMs);
-        }
+        if (!controller.signal.aborted) setDecoded({ file, requestedMs: frameMs, frame });
       })
       .catch(() => {
-        if (controller.signal.aborted) return;
-        setLocalFrame(null);
-        setDecodeFailed(true);
-        if (requestedFallbackFor.current !== file) {
-          requestedFallbackFor.current = file;
-          onRequestPickAfterUpload?.();
-        }
+        if (!controller.signal.aborted) setFailedFile(file);
       });
     return () => controller.abort();
-  }, [file, frameMs, onRequestPickAfterUpload]);
-
-  useEffect(() => {
-    if (usingRemoteFrame && remoteFrame && frameMs !== remoteFrame.ms) setFrameMs(remoteFrame.ms);
-  }, [frameMs, remoteFrame, usingRemoteFrame]);
+  }, [file, frameMs, decodeFailed]);
 
   const changeFrame = (nextFrameMs: number) => {
-    setPoint(null);
-    setFrameMs(nextFrameMs);
+    setSelection(null);
+    setRequest({ file, ms: nextFrameMs });
   };
   const pending = confirmationState === "pending";
   const canConfirm = !pending && point !== null && activeFrameMs !== undefined;
 
   return (
     <section className="subject-picker" aria-labelledby="subject-picker-title">
-      <p className="subject-picker__eyebrow">Screen 07a</p>
       <h1 id="subject-picker-title">Pick who to follow</h1>
       <p>Tap the player to follow. Other people in the video are ignored.</p>
       <p className="subject-picker__role">Role: {roleLabel[role]}</p>
 
       {displayedFrame ? (
         <>
-          <TapTarget alt="Selected video frame" frame={displayedFrame} onPointChange={setPoint} point={point} />
+          <TapTarget alt="Selected video frame" frame={displayedFrame} disabled={pending}
+            onPointChange={(nextPoint) => {
+              if (activeFrameMs !== undefined) setSelection({ file, url: displayedFrame.url, ms: activeFrameMs, point: nextPoint });
+            }} onUnavailable={() => setSelection(null)} point={point} />
           <p id="tap-target-help">Choose a clear frame, then tap the player.</p>
         </>
       ) : (
@@ -106,13 +89,13 @@ export function SubjectPicker({
       )}
 
       {!usingRemoteFrame && localFrame && (
-        <FrameScrubber durationMs={localFrame.durationMs} frameMs={frameMs} onFrameMsChange={changeFrame} />
+        <FrameScrubber disabled={pending} durationMs={localFrame.durationMs} frameMs={frameMs} onFrameMsChange={changeFrame} />
       )}
       {usingRemoteFrame && selectionFrames && (
-        <FrameScrubber frameMs={remoteFrame?.ms ?? 0} onFrameMsChange={changeFrame} selectionFrames={selectionFrames} />
+        <FrameScrubber disabled={pending} frameMs={remoteFrame?.ms ?? 0} onFrameMsChange={changeFrame} selectionFrames={selectionFrames} />
       )}
       {decodeFailed && (
-        <button onClick={onRequestPickAfterUpload} type="button">Pick after upload</button>
+        <button disabled={pending || !onRequestPickAfterUpload} onClick={onRequestPickAfterUpload} type="button">Pick after upload</button>
       )}
       {confirmationError && <p role="alert">{confirmationError}</p>}
       <div className="subject-picker__actions">
@@ -127,8 +110,9 @@ export function SubjectPicker({
           {pending ? "Confirming…" : "Confirm"}
         </button>
         <button
+          disabled={pending}
           onClick={() => {
-            setPoint(null);
+            setSelection(null);
             onRetake();
           }}
           type="button"

@@ -4,6 +4,7 @@ export type SelectionFrame = { idx: number; ms: number; url: string };
 
 type FrameScrubberProps = {
   durationMs?: number;
+  disabled?: boolean;
   frameMs: number;
   selectionFrames?: readonly SelectionFrame[];
   onFrameMsChange(frameMs: number): void;
@@ -14,10 +15,10 @@ function formatTime(ms: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function FrameScrubber({ durationMs, frameMs, selectionFrames, onFrameMsChange }: FrameScrubberProps) {
+export function FrameScrubber({ disabled = false, durationMs, frameMs, selectionFrames, onFrameMsChange }: FrameScrubberProps) {
   if (selectionFrames && selectionFrames.length > 0) {
     return (
-      <fieldset className="subject-picker__scrubber">
+      <fieldset disabled={disabled} className="subject-picker__scrubber">
         <legend>Selection frames</legend>
         <div className="subject-picker__frame-list" aria-label="Selection frames">
           {selectionFrames.map((frame) => (
@@ -40,6 +41,7 @@ export function FrameScrubber({ durationMs, frameMs, selectionFrames, onFrameMsC
     <label className="subject-picker__scrubber">
       <span>Frame: {formatTime(frameMs)}</span>
       <input
+        disabled={disabled}
         aria-label="Choose video frame"
         max={durationMs}
         min={0}

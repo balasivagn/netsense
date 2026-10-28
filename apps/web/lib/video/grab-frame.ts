@@ -25,11 +25,12 @@ function abortError(): DOMException {
 }
 
 function waitFor(
-  target: EventTarget,
-  success: string,
-  failure: string,
+  target: HTMLVideoElement,
+  ready: () => boolean,
+  events: readonly string[],
   signal: AbortSignal | undefined,
   timeoutMs: number,
+  trigger?: () => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     let done = false;
@@ -37,12 +38,12 @@ function waitFor(
       if (done) return;
       done = true;
       clearTimeout(timeout);
-      target.removeEventListener(success, onSuccess);
-      target.removeEventListener(failure, onFailure);
+      for (const event of events) target.removeEventListener(event, onSuccess);
+      target.removeEventListener("error", onFailure);
       signal?.removeEventListener("abort", onAbort);
       callback();
     };
-    const onSuccess = () => finish(resolve);
+    const onSuccess = () => { if (ready()) finish(resolve); };
     const onFailure = () => finish(() => reject(new Error("The video frame could not be decoded.")));
     const onAbort = () => finish(() => reject(abortError()));
     const timeout = setTimeout(
@@ -53,9 +54,10 @@ function waitFor(
       onAbort();
       return;
     }
-    target.addEventListener(success, onSuccess, { once: true });
-    target.addEventListener(failure, onFailure, { once: true });
+    for (const event of events) target.addEventListener(event, onSuccess);
+    target.addEventListener("error", onFailure, { once: true });
     signal?.addEventListener("abort", onAbort, { once: true });
+    try { trigger?.(); onSuccess(); } catch { onFailure(); }
   });
 }
 
@@ -66,6 +68,12 @@ export async function grabFrame(
 ): Promise<GrabbedFrame> {
   const dom = options.mediaDom ?? browserMediaDom;
   const timeoutMs = options.timeoutMs ?? 8_000;
+  if (!Number.isFinite(requestedMs) || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error("Invalid frame request.");
+  }
+  if (options.signal?.aborted) throw abortError();
+  const deadline = performance.now() + timeoutMs;
+  const remaining = () => Math.max(0, deadline - performance.now());
   let sourceUrl: string | null = null;
   let video: HTMLVideoElement | null = null;
 
@@ -74,17 +82,24 @@ export async function grabFrame(
     video = dom.createVideo();
     video.muted = true;
     video.preload = "auto";
-    video.src = sourceUrl;
-    video.load();
-    await waitFor(video, "loadedmetadata", "error", options.signal, timeoutMs);
+    const media = video;
+    const src = sourceUrl;
+    await waitFor(media, () => media.readyState >= 1, ["loadedmetadata"], options.signal, remaining(), () => {
+      media.src = src;
+      media.load();
+    });
 
     const durationMs = Math.round(video.duration * 1000);
-    if (!Number.isFinite(durationMs) || durationMs < 0 || video.videoWidth <= 0 || video.videoHeight <= 0) {
+    if (!Number.isFinite(durationMs) || durationMs <= 0 || video.videoWidth <= 0 || video.videoHeight <= 0) {
       throw new Error("The video does not contain a usable frame.");
     }
-    const frameMs = Math.min(durationMs, Math.max(0, Math.round(requestedMs)));
-    video.currentTime = frameMs / 1000;
-    await waitFor(video, "seeked", "error", options.signal, timeoutMs);
+    const frameMs = Math.min(Math.max(0, durationMs - 1), Math.max(0, Math.round(requestedMs)));
+    const seconds = frameMs / 1000;
+    await waitFor(media, () => !media.seeking && media.readyState >= 2 && Math.abs(media.currentTime - seconds) < 0.001,
+      ["seeked", "loadeddata", "canplay"], options.signal, remaining(), () => {
+        if (media.currentTime !== seconds) media.currentTime = seconds;
+      });
+    if (options.signal?.aborted) throw abortError();
 
     const canvas = dom.createCanvas();
     canvas.width = video.videoWidth;

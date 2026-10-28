@@ -17,4 +17,6 @@ This component slice implements screen 07a only. It does not own a route, upload
 
 `onConfirm` deliberately excludes `selectedBy`, timestamps, identity, and auth claims: the authenticated backend sets those. `confirmationState="pending"` disables duplicate confirmation. A parent must surface `JOB_IN_PROGRESS` or any other `setSubject` error through `confirmationError`.
 
-For a decode failure, the component asks the parent for the approved post-upload fallback and offers **Pick after upload**. It does not claim frame extraction exists and does not upload or fetch media itself. Once the parent provides real server selection frames, their supplied `ms` values are preserved.
+For a decode failure, the component offers **Pick after upload**. Clicking it asks the parent for the approved post-upload fallback. It does not claim frame extraction exists and does not upload or fetch media itself. Once the parent provides real server selection frames, their supplied `ms` values are preserved.
+
+Parent review fixes bind each tap to its file, displayed URL, and timestamp; pending decodes hide stale frames. Letterbox-aware marker placement updates on resize. The decoder registers listeners before loading/seeking and handles time zero without a seek event. Confirmation, retake, and scrubbing are disabled during confirmation. Browser/device decoding and the routed upload-to-selection flow remain UNTESTED; unit tests use controlled media events.
