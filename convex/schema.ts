@@ -233,6 +233,15 @@ export default defineSchema({
     errorCode: v.optional(errorCode),
     errorDetail: v.optional(v.string()),
     inputHash: v.string(),
+    persistedOutputHash: v.optional(v.string()),
+    persistedTrackBinding: v.optional(
+      v.object({ trackId: v.string(), fileRef: v.string() }),
+    ),
+    persistedAnnotationIds: v.optional(
+      v.array(
+        v.object({ markId: v.string(), annotationId: v.id("annotations") }),
+      ),
+    ),
     outputRef: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     endedAt: v.optional(v.number()),
@@ -360,7 +369,8 @@ export default defineSchema({
     cacheKey: v.string(),
   })
     .index("by_sessionId", ["sessionId"])
-    .index("by_cacheKey", ["cacheKey"]),
+    .index("by_cacheKey", ["cacheKey"])
+    .index("by_trackId", ["trackId"]),
   agentTraces: defineTable({
     coachId: v.id("coaches"),
     stageRunId: v.id("stageRuns"),

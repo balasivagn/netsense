@@ -1,3 +1,5 @@
+import { ConvexError } from "convex/values";
+import * as persistence from "../packages/contracts/gen/persistenceValidation";
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
@@ -18,6 +20,30 @@ import {
   parseStage,
   parseStageStatus,
 } from "./lib/httpInput";
+
+function parser<T>(validate: (value: unknown) => asserts value is T) {
+  return (value: unknown): T => {
+    validate(value);
+    return value;
+  };
+}
+const parseTranscode = parser(persistence.validateTranscodeOutput);
+const parseTurns = parser(persistence.validateTranscribeOutput);
+const parsePlan = parser(persistence.validatePlanOutput);
+const parseMoment = parser(persistence.validateMomentOutput);
+const parseTrack = parser(persistence.validateTrackOutput);
+const parseMarks = parser(persistence.validatePlaceOutput);
+const parseProvenance = parser(persistence.validateProvenance);
+const parseVerdicts = parser(persistence.validateCheckOutput);
+const parseRender = parser(persistence.validateRenderOutput);
+function parseTarget(value: unknown) {
+  if (value && typeof value === "object" && "anchorBox" in value) {
+    persistence.validateSubjectAnchorOutput(value);
+    return value;
+  }
+  persistence.validateSubjectOutput(value);
+  return value;
+}
 
 const http = httpRouter();
 const json = (value: unknown, status = 200) =>
@@ -48,7 +74,12 @@ type Invoke = (
   input: unknown,
   token: string,
 ) => Promise<unknown>;
-function post(path: string, auth: "service" | "worker", invoke: Invoke) {
+function post(
+  path: string,
+  auth: "service" | "worker",
+  invoke: Invoke,
+  limit = 32_768,
+) {
   http.route({
     path,
     method: "POST",
@@ -62,13 +93,15 @@ function post(path: string, auth: "service" | "worker", invoke: Invoke) {
       if (!token) return safeError(401, "UNAUTHORIZED");
       let input: unknown;
       try {
-        input = await readBody(request);
+        input = await readBody(request, limit);
       } catch {
         return safeError(400, "INVALID_REQUEST");
       }
       try {
         return json(await invoke(ctx, input, token));
-      } catch {
+      } catch (error) {
+        if (error instanceof ConvexError && error.data === "VERBATIM_MISMATCH")
+          return safeError(403, "VERBATIM_MISMATCH");
         return safeError(
           auth === "worker" ? 403 : 400,
           auth === "worker" ? "WORKER_REJECTED" : "REQUEST_REJECTED",
@@ -211,4 +244,102 @@ post("/worker/done", "worker", async (ctx, input, token) => {
   await ctx.runMutation(internal.worker.done, { token, ...args });
   return { ok: true };
 });
+post(
+  "/worker/persist/transcode",
+  "worker",
+  async (ctx, input, token) =>
+    ctx.runMutation(internal.pipeline.persistTranscode, {
+      token,
+      ...object(input, { stageRunId: id("stageRuns"), output: parseTranscode }),
+    }),
+  1_048_576,
+);
+post(
+  "/worker/persist/turns",
+  "worker",
+  async (ctx, input, token) =>
+    ctx.runMutation(internal.pipeline.persistTurns, {
+      token,
+      ...object(input, { stageRunId: id("stageRuns"), output: parseTurns }),
+    }),
+  1_048_576,
+);
+post(
+  "/worker/persist/plan",
+  "worker",
+  async (ctx, input, token) =>
+    ctx.runMutation(internal.pipeline.persistPlan, {
+      token,
+      ...object(input, { stageRunId: id("stageRuns"), output: parsePlan }),
+    }),
+  1_048_576,
+);
+post(
+  "/worker/persist/moment",
+  "worker",
+  async (ctx, input, token) =>
+    ctx.runMutation(internal.pipeline.persistMoment, {
+      token,
+      ...object(input, { stageRunId: id("stageRuns"), output: parseMoment }),
+    }),
+  1_048_576,
+);
+post(
+  "/worker/persist/target",
+  "worker",
+  async (ctx, input, token) =>
+    ctx.runMutation(internal.pipeline.persistTarget, {
+      token,
+      ...object(input, { stageRunId: id("stageRuns"), output: parseTarget }),
+    }),
+  1_048_576,
+);
+post(
+  "/worker/persist/track",
+  "worker",
+  async (ctx, input, token) =>
+    ctx.runMutation(internal.pipeline.persistTrack, {
+      token,
+      ...object(input, {
+        stageRunId: id("stageRuns"),
+        output: parseTrack,
+        cacheKey: string,
+      }),
+    }),
+  1_048_576,
+);
+post(
+  "/worker/persist/marks",
+  "worker",
+  async (ctx, input, token) =>
+    ctx.runMutation(internal.pipeline.persistMarks, {
+      token,
+      ...object(input, {
+        stageRunId: id("stageRuns"),
+        output: parseMarks,
+        provenance: parseProvenance,
+      }),
+    }),
+  1_048_576,
+);
+post(
+  "/worker/persist/verdicts",
+  "worker",
+  async (ctx, input, token) =>
+    ctx.runMutation(internal.pipeline.persistVerdicts, {
+      token,
+      ...object(input, { stageRunId: id("stageRuns"), output: parseVerdicts }),
+    }),
+  1_048_576,
+);
+post(
+  "/worker/persist/render",
+  "worker",
+  async (ctx, input, token) =>
+    ctx.runMutation(internal.pipeline.persistRender, {
+      token,
+      ...object(input, { stageRunId: id("stageRuns"), output: parseRender }),
+    }),
+  1_048_576,
+);
 export default http;

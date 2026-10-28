@@ -61,8 +61,10 @@ export function object<S extends Record<string, Parser<unknown>>>(
     Object.entries(shape).map(([key, parse]) => [key, parse(record[key])]),
   ) as { [K in keyof S]: ReturnType<S[K]> };
 }
-export async function readBody(request: Request): Promise<unknown> {
-  const limit = 32_768;
+export async function readBody(
+  request: Request,
+  limit = 32_768,
+): Promise<unknown> {
   const reader = request.body?.getReader();
   if (!reader) return reject();
   const chunks: Uint8Array[] = [];

@@ -9,6 +9,15 @@ export function convexValidator(schema: Schema): string {
   if (Array.isArray(schema.anyOf))
     return union(schema.anyOf.map((s) => convexValidator(s as Schema)));
   if (schema.type === "object") {
+    if (schema.patternProperties) {
+      const patterns = Object.values(
+        schema.patternProperties as Record<string, Schema>,
+      );
+      if (schema.properties || patterns.length !== 1)
+        throw Error("Unsupported mixed pattern object");
+      // Shape only: generated full validators enforce pattern keys and all constraints.
+      return `v.record(v.string(), ${convexValidator(patterns[0])})`;
+    }
     const properties = (schema.properties as Record<string, Schema>) ?? {};
     const required = (schema.required as string[]) ?? [];
     return `v.object({${Object.entries(properties)

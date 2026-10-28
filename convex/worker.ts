@@ -26,7 +26,7 @@ async function authorized(ctx: QueryCtx, token: string) {
     throw Error("WORKER_UNAUTHORIZED");
   return { job, session };
 }
-async function live(ctx: QueryCtx | MutationCtx, token: string) {
+export async function live(ctx: QueryCtx | MutationCtx, token: string) {
   const result = await authorized(ctx, token);
   if (
     result.session.latestJobId !== result.job._id ||
@@ -230,10 +230,15 @@ export const read = internalQuery({
       (item) => item.status === "complete" && item.coachId === job.coachId,
     );
     if (!upload) throw Error("UPLOAD_MISSING");
+    const student = await ctx.db.get(session.studentId);
+    if (!student || student.coachId !== job.coachId || !student.label.trim())
+      throw Error("STUDENT_MISSING");
     return {
       job: jobWire(job),
       config: configWire(config),
       session: {
+        studentLabel: student.label,
+        subjectRole: session.subjectRole,
         subject: session.subject ?? null,
         subjectAnchor: session.subjectAnchor ?? null,
         renderMode: session.renderMode,
