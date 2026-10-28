@@ -12,6 +12,7 @@ import urllib.request
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from typing import cast
+from urllib.parse import urlsplit
 
 from netsense_runner.adapters.tool import ToolAdapter, ToolExecutionError
 from netsense_runner.context import StageContext
@@ -25,11 +26,12 @@ from netsense_runner.media.ffmpeg import (
     frame_rate,
     positive_float,
     probe,
+    remaining_timeout,
     stream,
     transcode_proxy,
 )
 from netsense_runner.media.keyframes import extract_keyframes
-from netsense_runner.stage import StageResult, Usage
+from netsense_runner.stage import StageKey, StageResult, Usage, WorkerType
 
 _SESSION_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 _CHUNK_SECONDS = 570.0
@@ -38,11 +40,21 @@ _MAX_WAV_BYTES = 32 * 1024 * 1024
 Download = Callable[[str], Iterator[bytes]]
 
 
-def _http_download(url: str) -> Iterator[bytes]:
+def _http_download(url: str, *, deadline_monotonic: float) -> Iterator[bytes]:
     """Stream the signed URL supplied by storage, never a constructed endpoint."""
     try:
-        with urllib.request.urlopen(url) as response:  # noqa: S310 -- storage minted the URL
-            while chunk := response.read(1024 * 1024):
+        address = urlsplit(url)
+        if address.scheme not in {"http", "https"} or not address.hostname:
+            raise RuntimeError("INFRA_NETWORK")
+        # Bound stalls as well as total elapsed time. read1 returns after one
+        # underlying read, so a slow stream cannot hide inside a large read().
+        timeout = min(1.0, remaining_timeout(deadline_monotonic))
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            while True:
+                remaining_timeout(deadline_monotonic)
+                chunk = response.read1(1024 * 1024)
+                if not chunk:
+                    break
                 yield chunk
     except (OSError, urllib.error.URLError, urllib.error.HTTPError):
         raise RuntimeError("INFRA_NETWORK") from None
@@ -59,7 +71,7 @@ def _failure(code: str) -> StageResult:
         "error_code": code,
         "usage": _empty_usage(),
         "cost_usd": 0.0,
-        "trace": {"toolCalls": 0},
+        "trace": None,
     }
 
 
@@ -70,6 +82,8 @@ def _safe_key(key: str, session_id: str) -> bool:
         key.startswith(prefix)
         and bool(key)
         and not key.startswith("/")
+        and not any(character in key for character in ("%", "\\"))
+        and not any(ord(character) < 32 or ord(character) == 127 for character in key)
         and all(part not in {"", ".", ".."} for part in parts)
     )
 
@@ -112,26 +126,36 @@ def wav_chunk_ranges(duration_ms: int) -> list[tuple[int, int]]:
 
 
 class TranscodeWorker:
-    id = "transcode.ffmpeg@1"
-    stage = "transcode"
-    worker_type = "tool"
+    id: str = "transcode.ffmpeg@1"
+    stage: StageKey = "transcode"
+    worker_type: WorkerType = "tool"
     input_contract = "TranscodeInput"
     output_contract = "TranscodeOutput"
 
-    def __init__(
-        self, *, download: Download = _http_download, tool: ToolRunner | None = None
-    ) -> None:
+    def __init__(self, *, download: Download | None = None, tool: ToolRunner | None = None) -> None:
         self._download = download
         self._tool = tool or ToolAdapter()
 
     def _download_verified(
-        self, url: str, target: Path, declared_bytes: int, declared_sha256: str
+        self,
+        url: str,
+        target: Path,
+        declared_bytes: int,
+        declared_sha256: str,
+        deadline_monotonic: float,
     ) -> None:
         digest = hashlib.sha256()
         total = 0
         try:
+            remaining_timeout(deadline_monotonic)
+            incoming = (
+                self._download(url)
+                if self._download is not None
+                else _http_download(url, deadline_monotonic=deadline_monotonic)
+            )
             with target.open("wb") as output:
-                for chunk in self._download(url):
+                for chunk in incoming:
+                    remaining_timeout(deadline_monotonic)
                     if not isinstance(chunk, bytes):
                         raise RuntimeError("INFRA_NETWORK")
                     total += len(chunk)
@@ -141,18 +165,19 @@ class TranscodeWorker:
                     output.write(chunk)
         except ValueError:
             raise
-        except RuntimeError:
+        except ToolExecutionError:
             raise
-        except OSError:
+        except (OSError, RuntimeError):
             raise RuntimeError("INFRA_NETWORK") from None
+        remaining_timeout(deadline_monotonic)
         if total != declared_bytes or digest.hexdigest() != declared_sha256:
             raise ValueError("UPLOAD_CHECKSUM")
 
     def run(self, input_value: Mapping[str, JsonValue], ctx: StageContext) -> StageResult:
         try:
             validated_input = validate_contract("TranscodeInput", json.dumps(input_value))
-        except ValueError as error:
-            return _failure(str(error))
+        except (ValueError, TypeError):
+            return _failure("CONTRACT_INVALID")
         values = validated_input
         source_key = cast(str, getattr(values, "sourceKey"))
         session_id = ctx.session_id
@@ -165,6 +190,7 @@ class TranscodeWorker:
         index_key = f"{prefix}/keyframes.json"
         work_dir = Path(tempfile.mkdtemp(prefix="netsense-transcode-"))
         try:
+            remaining_timeout(ctx.deadline_monotonic)
             source = work_dir / "source"
             try:
                 source_url = ctx.storage.get_url(source_key)
@@ -173,12 +199,13 @@ class TranscodeWorker:
                     source,
                     cast(int, getattr(values, "declaredBytes")),
                     cast(str, getattr(values, "declaredSha256")),
+                    ctx.deadline_monotonic,
                 )
             except ValueError:
                 return _failure("UPLOAD_CHECKSUM")
-            except RuntimeError as error:
-                return _failure(str(error))
-            except OSError:
+            except ToolExecutionError:
+                raise
+            except (RuntimeError, OSError):
                 return _failure("INFRA_NETWORK")
 
             try:
@@ -246,6 +273,7 @@ class TranscodeWorker:
                 ):
                     return _failure("AUDIO_DECODE")
                 key = f"{prefix}/audio/{chunk_idx}.wav"
+                remaining_timeout(ctx.deadline_monotonic)
                 ctx.storage.put_file(key, str(wav), "audio/wav")
                 wavs.append({"key": key, "offsetMs": offset_ms, "durationMs": wav_duration})
 
@@ -261,11 +289,15 @@ class TranscodeWorker:
             keyframes: list[dict[str, JsonValue]] = []
             for idx, path in enumerate(frame_paths):
                 key = f"{prefix}/keyframes/{idx}.jpg"
+                remaining_timeout(ctx.deadline_monotonic)
                 ctx.storage.put_file(key, str(path), "image/jpeg")
                 keyframes.append({"idx": idx, "ms": idx * 500, "key": key})
 
+            remaining_timeout(ctx.deadline_monotonic)
             ctx.storage.put_file(proxy_key, str(proxy), "video/mp4")
+            remaining_timeout(ctx.deadline_monotonic)
             ctx.storage.put_file(m4a_key, str(m4a), "audio/mp4")
+            remaining_timeout(ctx.deadline_monotonic)
             ctx.storage.put_bytes(
                 index_key, json.dumps(keyframes, separators=(",", ":")).encode(), "application/json"
             )
@@ -289,10 +321,12 @@ class TranscodeWorker:
                 "error_code": None,
                 "usage": _empty_usage(),
                 "cost_usd": 0.0,
-                "trace": {"toolCalls": 0},
+                "trace": None,
             }
         except ToolExecutionError as error:
             return _failure(error.error_code)
+        except RuntimeError:
+            return _failure("INFRA_NETWORK")
         except (OSError, ValueError):
             return _failure("INFRA_EXEC")
         finally:

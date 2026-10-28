@@ -5,17 +5,20 @@ import json
 import subprocess
 import time
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
 import pytest
 
+from netsense_runner.adapters.tool import ToolResult
 from netsense_runner.budget import Budget
 from netsense_runner.context import StageContext
 from netsense_runner.contracts.PipelineConfig import PipelineConfig
 from netsense_runner.json_types import JsonValue
 from netsense_runner.registry import ProviderRegistry
-from netsense_runner.stages.s0_transcode import TranscodeWorker, wav_chunk_ranges
+from netsense_runner.stage import StageWorker
+from netsense_runner.stages.s0_transcode import TranscodeWorker, _http_download, wav_chunk_ranges
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -257,7 +260,7 @@ def test_checksum_and_size_rejection_happen_before_tools_or_uploads(wrong: bytes
     storage = Storage()
 
     class ForbiddenTool:
-        def run(self, command: tuple[str, ...], *, timeout_s: float) -> object:
+        def run(self, command: tuple[str, ...], *, timeout_s: float) -> ToolResult:
             raise AssertionError("ffmpeg must not run before checksum verification")
 
     result = TranscodeWorker(download=lambda _url: iter((wrong,)), tool=ForbiddenTool()).run(
@@ -295,7 +298,7 @@ def test_timeout_and_temp_cleanup(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     payload = b"x"
 
     class TimeoutTool:
-        def run(self, command: tuple[str, ...], *, timeout_s: float) -> object:
+        def run(self, command: tuple[str, ...], *, timeout_s: float) -> ToolResult:
             from netsense_runner.adapters.tool import ToolExecutionError
 
             raise ToolExecutionError("STAGE_TIMEOUT")
@@ -311,3 +314,97 @@ def test_wav_chunk_ranges_keep_offsets_contiguous_and_final_chunk_short() -> Non
     ranges = wav_chunk_ranges(1_140_123)
     assert ranges == [(0, 570_000), (570_000, 570_000), (1_140_000, 123)]
     assert all(duration <= 570_000 for _, duration in ranges)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "sessions/other/source",
+        "sessions/session_1/../source",
+        "sessions/session_1/%2e%2e/source",
+        "sessions/session_1/dir\\source",
+        "sessions/session_1/source\n",
+        "sessions/session_1//source",
+    ],
+)
+def test_invalid_storage_keys_fail_before_signing(key: str) -> None:
+    storage = Storage()
+    value = {**input_for(b"x"), "sourceKey": key}
+    worker: StageWorker = TranscodeWorker()
+    assert worker.run(value, context(storage))["error_code"] == "CONTRACT_INVALID"
+    assert not storage.url_requests
+    assert not storage.uploaded
+
+
+def test_expired_deadline_fails_before_signing_or_downloading() -> None:
+    storage = Storage()
+    ctx = replace(context(storage), deadline_monotonic=time.monotonic() - 1)
+    result = TranscodeWorker().run(input_for(b"x"), ctx)
+    assert result["error_code"] == "STAGE_TIMEOUT"
+    assert not storage.url_requests
+
+
+def test_download_failure_does_not_return_raw_exception() -> None:
+    def broken_download(_url: str) -> Iterator[bytes]:
+        raise RuntimeError("private transport response")
+        yield b""  # pragma: no cover
+
+    result = TranscodeWorker(download=broken_download).run(input_for(b"x"), context(Storage()))
+    assert result["error_code"] == "INFRA_NETWORK"
+    assert "private transport response" not in str(result)
+
+
+def test_download_checks_elapsed_deadline_between_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = [0.0]
+    storage = Storage()
+    ctx = replace(context(storage), deadline_monotonic=10.0)
+    monkeypatch.setattr("netsense_runner.media.ffmpeg.time.monotonic", lambda: clock[0])
+
+    def slow_download(_url: str) -> Iterator[bytes]:
+        yield b"a"
+        clock[0] = 11.0
+        yield b"b"
+
+    result = TranscodeWorker(download=slow_download).run(input_for(b"ab"), ctx)
+    assert result["error_code"] == "STAGE_TIMEOUT"
+    assert not storage.uploaded
+
+
+def test_http_download_bounds_socket_wait_and_closes_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waits: list[float] = []
+
+    class Response:
+        closed = False
+        chunks = iter((b"a", b"b", b""))
+
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            self.closed = True
+
+        def read1(self, _size: int) -> bytes:
+            return next(self.chunks)
+
+    response = Response()
+
+    def open_url(_url: str, *, timeout: float) -> Response:
+        waits.append(timeout)
+        return response
+
+    monkeypatch.setattr("netsense_runner.stages.s0_transcode.urllib.request.urlopen", open_url)
+    assert (
+        b"".join(
+            _http_download(
+                "https://storage.invalid/source", deadline_monotonic=time.monotonic() + 10
+            )
+        )
+        == b"ab"
+    )
+    assert waits == [1.0]
+    assert response.closed
+    with pytest.raises(RuntimeError, match="INFRA_NETWORK"):
+        list(_http_download("file:///not-a-signed-url", deadline_monotonic=time.monotonic() + 10))
+    assert waits == [1.0]

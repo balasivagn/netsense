@@ -8,11 +8,11 @@ import time
 from pathlib import Path
 from typing import Mapping, Protocol, cast
 
-from netsense_runner.adapters.tool import ToolExecutionError
+from netsense_runner.adapters.tool import ToolExecutionError, ToolResult
 
 
 class ToolRunner(Protocol):
-    def run(self, command: tuple[str, ...], *, timeout_s: float) -> object: ...
+    def run(self, command: tuple[str, ...], *, timeout_s: float) -> ToolResult: ...
 
 
 class MediaProbeError(RuntimeError):
@@ -25,16 +25,16 @@ class MediaProbeError(RuntimeError):
 
 def remaining_timeout(deadline_monotonic: float) -> float:
     """Return the single stage deadline budget left for the next tool invocation."""
-    return deadline_monotonic - time.monotonic()
+    remaining = deadline_monotonic - time.monotonic()
+    if not math.isfinite(remaining) or remaining <= 0:
+        raise ToolExecutionError("STAGE_TIMEOUT")
+    return remaining
 
 
 def run_tool(tool: ToolRunner, command: tuple[str, ...], deadline_monotonic: float) -> bytes:
     """Run one command without resetting the stage's deadline."""
-    try:
-        result = tool.run(command, timeout_s=remaining_timeout(deadline_monotonic))
-    except ToolExecutionError:
-        raise
-    return cast(bytes, getattr(result, "stdout"))
+    result = tool.run(command, timeout_s=remaining_timeout(deadline_monotonic))
+    return result.stdout
 
 
 def probe(path: Path, tool: ToolRunner, deadline_monotonic: float) -> Mapping[str, object]:

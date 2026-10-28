@@ -15,3 +15,15 @@ inject the iterator transport, so network behavior is isolated at that boundary.
 Temporary files are removed in `finally`. HEVC/MOV processing is marked
 **UNTESTED** when the local ffmpeg build lacks `libx265`; the synthetic generator
 records that capability explicitly.
+
+Parent review added typed `StageWorker` conformance, deadline checks before
+download/signing and between chunks/tools/uploads, bounded socket stalls, and
+safe error mapping for transport failures. A default download accepts HTTP(S)
+only; socket reads time out after at most one second without progress (the DAG
+owns retries). Injected transports must also bound their blocking I/O. No raw
+transport exception is returned in stage results. Canonical key checks reject
+encoded paths, backslashes and control characters before requesting a URL.
+
+The full network/storage client, upload retry behavior and DAG integration remain
+pending. Tests exercise actual local ffmpeg for MP4, WebM and HEVC/MOV, plus an
+in-memory HTTP response boundary; no live storage or vendor API was called.
