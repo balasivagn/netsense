@@ -6,7 +6,7 @@ import secrets
 import subprocess
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TypeVar, cast
@@ -872,3 +872,48 @@ def test_checker_bad_input_does_not_count_as_stage_five_failure(harness: Harness
     outcome = harness.runner.run()
     assert outcome.status == "waiting_for_coach" and outcome.error_code is None
     assert set(outcome.branch_errors.values()) == {"SEG_BAD_INPUT"}
+
+
+def test_fake_dag_reaches_review_with_real_renderer(harness: Harness, tmp_path: Path) -> None:
+    """Local integration: actual transcode/check/render, fake model stages, typed API."""
+    from netsense_runner.stages.s8_render import RenderWorker
+
+    h = harness
+    stage = next(s for s in h.api.state.projection.config.stages if s.stage == "render")
+    stage.workerId, stage.provider = "render.ffmpeg@1", "local"
+
+    def download(key: str, *, timeout_s: float, max_bytes: int) -> Iterator[bytes]:
+        assert timeout_s > 0
+        data = h.store.read(key)
+        assert len(data) <= max_bytes
+        return iter(data[i:i + 1024**2] for i in range(0, len(data), 1024**2))
+
+    def load_track(key: str, *, timeout_s: float, max_bytes: int) -> bytes:
+        assert timeout_s > 0
+        data = h.store.read(key)
+        assert len(data) <= max_bytes
+        return data
+
+    def exists(key: str, *, timeout_s: float) -> bool:
+        assert timeout_s > 0
+        return key in h.store.values
+
+    h.runner.workers[(stage.workerId, "RenderInput")] = lambda _: RenderWorker(
+        download=download, track_loader=load_track, object_exists=exists
+    )
+    outcome = h.runner.run()
+    assert outcome.status == "waiting_for_coach", outcome.error_code
+    assert outcome.error_code is None and not outcome.branch_errors
+    assert h.cleaned == [True] and h.runner.heartbeat_stopped.is_set()
+    persisted = next(value for route, _, value in h.api.state.persists if route.endswith("/render"))
+    output = cast(dict[str, JsonValue], persisted["output"])
+    assert output["fileRef"] == "sessions/synthetic-session/renders/preview/full.mp4"
+    target = tmp_path / "preview.mp4"
+    target.write_bytes(h.store.read(output["fileRef"]))
+    info = json.loads(subprocess.check_output([
+        "ffprobe", "-v", "error", "-show_entries", "format=duration:stream=codec_type",
+        "-of", "json", str(target),
+    ]))
+    assert {item["codec_type"] for item in info["streams"]} == {"video", "audio"}
+    assert abs(float(info["format"]["duration"]) - 3) < 0.15
+    assert len(cast(list[JsonValue], output["stillRefs"])) == 2

@@ -132,6 +132,7 @@ def input_value(
 def annotation(annotation_id: str = "a1", start: int = 300, end: int = 700) -> dict[str, Any]:
     return {
         "annotationId": annotation_id,
+        "keyframeMs": (start + end) // 2,
         "markType": "circle",
         "anchor": "box_top",
         "arrowFrom": None,

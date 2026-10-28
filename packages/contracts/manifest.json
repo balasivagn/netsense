@@ -79,7 +79,7 @@
     }
   ],
   "algorithm": "sha256(filename + source bytes, sorted filenames)",
-  "digest": "bf2664cdc72107f118bf7f72b194fe1fb0301e976a0ce8541485f63b60d7c948",
+  "digest": "3bdc13330d87a44e3e18bece787acfc1ffb6d423a0c6f5e5a17ca1b7dd0859d2",
   "schemas": [
     "CheckInput",
     "CheckOutput",

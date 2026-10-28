@@ -67,6 +67,7 @@ function handler(
   fetchImpl: typeof fetch,
   signedStorage = storage(),
   env: Record<string, string | undefined> = {},
+  upstreamTimeoutMs = 1000,
 ) {
   return {
     storage: signedStorage,
@@ -79,7 +80,7 @@ function handler(
       storage: signedStorage,
       fetch: fetchImpl,
       now: () => now,
-      upstreamTimeoutMs: 15,
+      upstreamTimeoutMs,
     }),
   };
 }
@@ -199,7 +200,7 @@ test("fails closed for stopped jobs, stale leases, failed reads, redirects, over
     expect((await signed.post(await request({ ops: [{ op: "get", key: `sessions/${sessionId}/source/a` }] }))).status).not.toBe(200);
     expect(signed.storage.calls).toEqual([]);
   }
-  const slow = handler((() => new Promise<Response>(() => undefined)) as typeof fetch);
+  const slow = handler((() => new Promise<Response>(() => undefined)) as typeof fetch, storage(), {}, 15);
   expect((await slow.post(await request({ ops: [{ op: "get", key: `sessions/${sessionId}/source/a` }] }))).status).toBe(503);
 });
 
@@ -238,7 +239,7 @@ test("upstream cleanup cancels incomplete bodies and leaves no deadline timers a
 
 test("a stalled response body is cancelled at the overall upstream deadline", async () => {
   const cancel = vi.fn();
-  const signed = handler(vi.fn(async () => new Response(new ReadableStream<Uint8Array>({ cancel }))) as unknown as typeof fetch);
+  const signed = handler(vi.fn(async () => new Response(new ReadableStream<Uint8Array>({ cancel }))) as unknown as typeof fetch, storage(), {}, 15);
   expect((await signed.post(await request({ ops: [{ op: "get", key: `sessions/${sessionId}/source/a` }] }))).status).toBe(503);
   expect(cancel).toHaveBeenCalledOnce();
   expect(signed.storage.calls).toEqual([]);

@@ -25,6 +25,7 @@ from netsense_runner.contracts.MomentOutput import MomentOutput
 from netsense_runner.contracts.PlaceOutput import PlaceOutput
 from netsense_runner.contracts.PlanOutput import PlanOutput, Remark
 from netsense_runner.contracts.Provenance import Provenance
+from netsense_runner.contracts.RenderInput import Annotation
 from netsense_runner.contracts.RenderOutput import RenderOutput
 from netsense_runner.contracts.SubjectAnchorOutput import SubjectAnchorOutput
 from netsense_runner.contracts.SubjectOutput import SubjectOutput
@@ -33,6 +34,7 @@ from netsense_runner.contracts.TrackOutput import TrackOutput
 from netsense_runner.contracts.TranscodeOutput import TranscodeOutput
 from netsense_runner.contracts.TranscribeOutput import TranscribeOutput
 from netsense_runner.json_types import JsonValue
+from netsense_runner.media.segments import build_segments
 from netsense_runner.persistence import WorkerClient
 from netsense_runner.registry import ProviderRegistry
 from netsense_runner.rules.stills_routing import TrackedRemark, should_route_to_stills
@@ -628,12 +630,12 @@ class Runner:
             rid: all_times[all_ids[i - 1]] if i else 0 for i, rid in enumerate(all_ids)
         }
         errors: dict[str, str] = {}
-        results: list[tuple[Remark, Completed, Completed, Completed]] = []
+        results: list[tuple[Remark, Completed, Completed, Completed, Completed]] = []
         track_errors: dict[str, str] = {}
 
         def branch(
             item: tuple[int, Remark],
-        ) -> tuple[Remark, tuple[Completed, Completed, Completed] | None, str | None]:
+        ) -> tuple[Remark, tuple[Completed, Completed, Completed, Completed] | None, str | None]:
             index, remark = item
             phase = "moment"
             try:
@@ -702,7 +704,7 @@ class Runner:
                     remark=remark.remarkId,
                     number=number,
                 )
-                return remark, (prun, trun, crun), crun.error_code
+                return remark, (mrun, prun, trun, crun), crun.error_code
             except DagFailure as failure:
                 if phase == "track":
                     track_errors[remark.remarkId] = failure.code
@@ -725,8 +727,8 @@ class Runner:
             if r.aboutSubject in {"yes", "unclear"}
         ]
         annotations: list[JsonValue] = []
-        segments: list[JsonValue] = []
-        for remark, prun, trun, crun in results:
+        for remark, mrun, prun, trun, crun in results:
+            moment = MomentOutput.model_validate(model_value(mrun.output))
             place = PlaceOutput.model_validate(model_value(prun.output))
             track = TrackOutput.model_validate(model_value(trun.output))
             checked = CheckOutput.model_validate(model_value(crun.output))
@@ -738,6 +740,7 @@ class Runner:
                 selected.append(
                     {
                         "annotationId": prun.annotations[mark.markId],
+                        "keyframeMs": moment.keyframeMs,
                         "markType": mark.markType,
                         "anchor": mark.anchor,
                         "arrowFrom": mark.arrowFrom,
@@ -749,18 +752,12 @@ class Runner:
                     }
                 )
             annotations.extend(selected)
-            if selected:
-                segments.append(
-                    {
-                        "segmentId": remark.remarkId,
-                        "startMs": min(m.startMs for m in place.marks),
-                        "endMs": max(m.endMs for m in place.marks),
-                        "annotationIds": [
-                            prun.annotations[m.markId] for m in place.marks if m.markId in passes
-                        ],
-                        "hash": digest(selected),
-                    }
-                )
+        segments: list[JsonValue] = [
+            model_value(segment)
+            for segment in build_segments(
+                [Annotation.model_validate(item) for item in annotations], media.durationMs
+            )
+        ]
         if self._budget_failure is not None:
             return errors
         try:

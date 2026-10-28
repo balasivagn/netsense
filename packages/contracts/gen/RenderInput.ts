@@ -22,6 +22,7 @@ export interface RenderInput {
     labelText: string;
     placedBy: "ai" | "coach";
     trackFileRef: string;
+    keyframeMs: number;
   }[];
   previousSegments: {
     segmentId: string;

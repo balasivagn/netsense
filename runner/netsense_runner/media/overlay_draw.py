@@ -150,7 +150,8 @@ def draw_marks(
             else:
                 draw.rectangle(plate, outline="white", width=2)
             draw.text(
-                (left + 5 - text_box[0], top + 5 - text_box[1]), mark.label, fill="white", font=font
+                (left + 5 - text_box[0], top + 5 - text_box[1]),
+                mark.label, fill="white", font=label_font
             )
     return Image.alpha_composite(background, output)
 

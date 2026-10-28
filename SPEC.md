@@ -482,7 +482,7 @@ Input `RenderInput`:
 {"kind": "preview|final", "mode": "video|stills", "proxyKey": "FileRef", "durationMs": 0,
  "segments": [{"segmentId": "string", "startMs": 0, "endMs": 0, "annotationIds": ["string"], "hash": "hex"}],
  "annotations": [{"annotationId": "string", "markType": "circle", "anchor": "box_top", "arrowFrom": null, "startMs": 0, "endMs": 0,
-                  "labelText": "string", "placedBy": "ai|coach", "trackFileRef": "FileRef"}],
+                  "labelText": "string", "placedBy": "ai|coach", "trackFileRef": "FileRef", "keyframeMs": 0}],
  "previousSegments": [{"segmentId": "string", "hash": "hex", "key": "FileRef"}]}
 ```
 Output `RenderOutput`:
@@ -490,7 +490,7 @@ Output `RenderOutput`:
 {"kind": "preview|final", "mode": "video|stills", "fileRef": "FileRef|null", "stillRefs": [{"annotationId": "string", "key": "FileRef"}],
  "segmentRefs": [{"segmentId": "string", "hash": "hex", "key": "FileRef"}], "durationMs": 0}
 ```
-Video: a segment is each annotated time range merged with neighbours closer than 1 s. For each segment, Pillow draws per-frame RGBA overlays from the track boxes (circle = ellipse around the anchor; arrow = from `arrowFrom` side toward the anchor; highlight = translucent box; label = text plate above the box); ffmpeg overlays them on the cut segment (`-c:v libx264 -crf 23`); un-annotated stretches are stream-copied where keyframes allow, else re-encoded; concat; `-movflags +faststart`. AI-placed marks render dashed; coach-placed solid. Final render reuses segment files whose `hash` (annotation content + track ref) has not changed, so only affected segments re-render. Stills: one JPEG per annotation at the key frame. Errors → `RENDER_FAIL`; the UI falls back to the live overlay. Timeout 300 s, retry 2.
+Video: a segment is each annotated time range merged with neighbours closer than 1 s. For each segment, Pillow draws per-frame RGBA overlays from the track boxes (circle = ellipse around the anchor; arrow = from `arrowFrom` side toward the anchor; highlight = translucent box; label = text plate above the box); ffmpeg overlays them on the cut segment (`-c:v libx264 -crf 23`); un-annotated stretches are stream-copied where keyframes allow, else re-encoded; concat; `-movflags +faststart`. AI-placed marks render dashed; coach-placed solid. Final render reuses segment files whose `hash` (annotation content + track ref) has not changed, so only affected segments re-render. Stills: one JPEG per annotation at the selected key frame. `RenderInput.annotations.keyframeMs` is required and comes from that remark's persisted `MomentOutput.keyframeMs`; rendering never substitutes the first observed track frame. It must be inside the annotation's half-open interval and have a safe subject observation. An unavailable or unsafe selected frame fails the render. This field is also included in segment hashes. Errors → `RENDER_FAIL`; the UI falls back to the live overlay. Timeout 300 s, retry 2.
 
 ---
 
@@ -747,7 +747,7 @@ export interface VideoStorage {
   delete(keyOrPrefix: string): Promise<void>;
 }
 ```
-Key layout: `sessions/{sessionId}/source/{uploadId}`, `.../proxy.mp4`, `.../audio/{n}.wav`, `.../audio.m4a`, `.../keyframes/{idx}.jpg`, `.../keyframes.json`, `.../windows/{remarkId}.mp4`, `.../tracks/{remarkId}.json`, `.../masks/{remarkId}.bin`, `.../renders/{kind}/{segmentId}.mp4`, `.../renders/{kind}/full.mp4`, `.../stills/{annotationId}.jpg`.
+Key layout: `sessions/{sessionId}/source/{uploadId}`, `.../proxy.mp4`, `.../audio/{n}.wav`, `.../audio.m4a`, `.../keyframes/{idx}.jpg`, `.../keyframes.json`, `.../windows/{remarkId}.mp4`, `.../tracks/{remarkId}.json`, `.../masks/{remarkId}.bin`, `.../renders/{kind}/{segmentId}-{hash}.mp4`, `.../renders/{kind}/full.mp4`, `.../stills/{annotationId}.jpg`. Render segment keys include the annotation-content hash so an older segment reference cannot alias bytes overwritten by a later edit. FileRef consumers also accept validated, canonical immutable run-artifact keys inside the same session.
 
 - **R2 adapter**: AWS SDK v3 S3 client, `endpoint = R2_ENDPOINT`, `region = "auto"`. Bucket private; CORS allows `PUT` from `APP_BASE_URL` and exposes `ETag`. Part size 8 MiB (5–10 MB guidance). Signed GETs use `ResponseContentDisposition: inline`.
 - **Local adapter**: files under `LOCAL_STORAGE_DIR` (`/data/netsense` on the VM); multipart parts as `key.parts/{n}`; signed URLs are `/api/media/local/{key}?exp=..&sig=HMAC(MEDIA_URL_SIGNING_SECRET, method|key|exp)`; GET supports `Range` for video seeking.

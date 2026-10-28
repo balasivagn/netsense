@@ -17,6 +17,7 @@ from netsense_runner.adapters.tool import ToolAdapter, ToolExecutionError, ToolR
 from netsense_runner.contracts.RenderInput import Annotation
 from netsense_runner.contracts.TrackFile import TrackFile
 from netsense_runner.json_types import JsonValue
+from netsense_runner.media.ffmpeg import ToolRunner, run_tool
 from netsense_runner.media.overlay_draw import OverlayMark, anchor_point, arrow_geometry, draw_marks
 from netsense_runner.media.render_validation import media_shape, validate_track
 from netsense_runner.media.segments import build_segments
@@ -695,3 +696,56 @@ def test_long_unicode_label_fits_without_rewriting(monkeypatch: pytest.MonkeyPat
     )
     assert seen == [label]
     assert result.size == (120, 120)
+
+
+def test_stills_use_explicit_selected_keyframe_not_first_observation(
+    media: Storage, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from netsense_runner.stages import s8_render as module
+
+    observed: list[str] = []
+    original = run_tool
+
+    def record(tool: ToolRunner, command: tuple[str, ...], deadline: float) -> bytes:
+        if command[-1].endswith("still-0.jpg"):
+            observed.append(command[command.index("-ss") + 1])
+        return original(tool, command, deadline)
+
+    monkeypatch.setattr(module, "run_tool", record)
+    mark = annotation()
+    mark["keyframeMs"] = 600
+    value = input_value([mark])
+    value["mode"] = "stills"
+    result = worker(media).run(value, context(media))
+    assert result["status"] == "done"
+    assert observed == ["0.600000"]
+
+
+@pytest.mark.parametrize("keyframe", [-1, 299, 700])
+def test_selected_keyframe_outside_mark_fails_before_io(keyframe: int) -> None:
+    mark = annotation()
+    mark["keyframeMs"] = keyframe
+    storage = Storage({})
+    result = worker(storage).run(input_value([mark]), context(storage))
+    assert result["error_code"] == "CONTRACT_INVALID"
+    assert not storage.puts
+
+
+def test_label_shrink_draws_with_the_measured_font(monkeypatch: pytest.MonkeyPatch) -> None:
+    from PIL import ImageDraw, ImageFont
+
+    sizes: list[float] = []
+    original = ImageDraw.ImageDraw.text
+
+    def record(
+        draw: ImageDraw.ImageDraw, xy: tuple[int, int], text: str, **kwargs: Any
+    ) -> None:
+        sizes.append(cast(ImageFont.FreeTypeFont, kwargs["font"]).size)
+        original(draw, xy, text, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", record)
+    draw_marks(
+        Image.new("RGB", (120, 120), "white"), (10, 20, 100, 100),
+        [OverlayMark("label", "box_top", None, "W" * 50, "ai")],
+    )
+    assert len(sizes) == 1 and sizes[0] < 14

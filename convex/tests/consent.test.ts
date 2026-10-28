@@ -8,9 +8,10 @@ test("sessions have no consent confirmation until their owner confirms", async (
   expect(before?.consentConfirmedAt).toBeUndefined();
   expect(before?.consentConfirmedBy).toBeUndefined();
 
-  const beforeConfirmation = Date.now();
+  // convex-test pins a monotonic transaction clock, which can lead wall time.
+  const beforeConfirmation = await t.run(async () => Date.now());
   await coach.mutation(api.sessions.confirmConsent, { sessionId });
-  const afterConfirmation = Date.now();
+  const afterConfirmation = await t.run(async () => Date.now());
 
   expect(await t.run((ctx) => ctx.db.get(sessionId))).toMatchObject({
     consentConfirmedBy: data.identity.subject,

@@ -189,3 +189,12 @@ The reviewed HTTP transport from PR12 (`a9982c9`) is included. Preview worker `R
 Review validation: `pnpm check` PASS — **283 JS, 280 runner, 33 orchestrator tests**; **49 focused DAG tests**. Strict types, generated contracts/bindings, secret scan, diff check and actual pre-commit pass. T1.09 remains partial and PR13 stays draft.
 
 Additional integration limit: the job projection does not expose already accumulated frame/token/spend counters to initialize a fresh local Budget after process restart. Completed-stage resume avoids charging those stages twice, but that alone does not prove whole-job caps across restarts. Host/recovery wiring must seed or reconcile actual counters before any paid run; this remains UNTESTED. No paid provider was called.
+
+
+Renderer integration update: the DAG now calls media.segments.build_segments on
+passed annotations, so overlapping/nearby mark windows and hashes match the real
+renderer. Each annotation carries the exact completed moment keyframeMs through
+the amended RenderInput contract and matching SPEC change. The real ffmpeg
+renderer passes an integration test with actual transcode/checker, fake model
+stages and the typed API client over injected transport. Host wiring and full
+browser E2E remain pending; earlier JSON-render-stub tests remain test-only.

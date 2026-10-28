@@ -25,7 +25,8 @@
         "endMs": 0,
         "labelText": "synthetic",
         "placedBy": "ai",
-        "trackFileRef": "synthetic"
+        "trackFileRef": "synthetic",
+        "keyframeMs": 0
       }
     ],
     "previousSegments": [
@@ -71,7 +72,6 @@
         "hash": "0000000000000000000000000000000000000000000000000000000000000000",
         "key": "synthetic"
       }
-    ],
-    "unexpected": true
+    ]
   }
 }

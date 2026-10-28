@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import math
-import re
 import shutil
 import tempfile
 from bisect import bisect_left, bisect_right
@@ -104,6 +103,7 @@ class RenderWorker:
             annotations = raw.annotations
             if (
                 any(not safe_id(item.annotationId) for item in annotations)
+                or any(not item.startMs <= item.keyframeMs < item.endMs for item in annotations)
                 or any(not safe_id(item.segmentId) for item in raw.segments + raw.previousSegments)
                 or any(not _safe_key(item.key, ctx.session_id) for item in raw.previousSegments)
             ):
@@ -112,8 +112,7 @@ class RenderWorker:
                 raise ValueError
             if any(
                 not _safe_key(item.trackFileRef, ctx.session_id)
-                or re.fullmatch(r"sessions/[^/]+/tracks/[A-Za-z0-9_-]+\.json", item.trackFileRef)
-                is None
+                or item.trackFileRef == raw.proxyKey
                 for item in annotations
             ):
                 raise ValueError
@@ -340,21 +339,12 @@ class RenderWorker:
         for annotation in annotations:
             remaining_timeout(ctx.deadline_monotonic)
             track = tracks[annotation.trackFileRef]
-            frame_ms: int | None = None
-            for frame in track.frames:
-                remaining_timeout(ctx.deadline_monotonic)
-                if (
-                    annotation.startMs <= frame.ms < annotation.endMs
-                    and self._box_at(track, frame.ms) is not None
-                ):
-                    frame_ms = frame.ms
-                    break
-            if frame_ms is None:
+            frame_ms = annotation.keyframeMs
+            if not annotation.startMs <= frame_ms < annotation.endMs:
                 raise ValueError
-            # Video tracks lack selected keyframeMs in RenderInput. This is explicitly
-            # the first valid observation, not a proven separate upstream selection.
             box = self._box_at(track, frame_ms)
-            assert box is not None
+            if box is None:
+                raise ValueError
             image = work / f"still-{len(refs)}.jpg"
             run_tool(
                 self._tool,
