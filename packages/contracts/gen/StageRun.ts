@@ -1,6 +1,7 @@
 /* Generated from JSON Schema. Do not edit. */
 
 export type ErrorCode =
+  | "CONSENT_REQUIRED"
   | "UPLOAD_PART_FAILED"
   | "UPLOAD_CHECKSUM"
   | "UPLOAD_SIZE_MISMATCH"

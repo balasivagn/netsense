@@ -1,6 +1,7 @@
 // Error codes mirror ErrorCode.json; verified by contract tests.
 import { v } from "convex/values";
 export const errorCode = v.union(
+  v.literal("CONSENT_REQUIRED"),
   v.literal("UPLOAD_PART_FAILED"),
   v.literal("UPLOAD_CHECKSUM"),
   v.literal("UPLOAD_SIZE_MISMATCH"),

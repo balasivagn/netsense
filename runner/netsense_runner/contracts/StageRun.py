@@ -75,6 +75,7 @@ class StageRun(ContractModel):
     status: Literal["queued", "running", "done", "failed", "skipped", "fallback", "needs_coach"]
     errorCode: (
         Literal[
+            "CONSENT_REQUIRED",
             "UPLOAD_PART_FAILED",
             "UPLOAD_CHECKSUM",
             "UPLOAD_SIZE_MISMATCH",
