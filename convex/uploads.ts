@@ -15,6 +15,7 @@ async function checked(
   if (!u || !s || u.coachId !== coachId || s.coachId !== coachId)
     throw Error("NOT_FOUND");
   if (s.consentConfirmedAt === undefined) throw Error("CONSENT_REQUIRED");
+  if (!s.captureMode) throw Error("CAPTURE_MODE_REQUIRED");
   return u;
 }
 export const owned = query({
@@ -40,6 +41,7 @@ export const reserve = internalMutation({
     const s = await ctx.db.get(a.sessionId);
     if (!s || s.coachId !== a.coachId) throw Error("NOT_FOUND");
     if (s.consentConfirmedAt === undefined) throw Error("CONSENT_REQUIRED");
+    if (!s.captureMode) throw Error("CAPTURE_MODE_REQUIRED");
     if (
       !Number.isSafeInteger(a.bytesTotal) ||
       a.bytesTotal < 1 ||
@@ -54,6 +56,8 @@ export const reserve = internalMutation({
       .withIndex("by_sessionId", (q) => q.eq("sessionId", s._id))
       .collect();
     const existing = rows.find((u) => u.sha256 === a.sha256);
+    if ((s.uploadFailures ?? 0) >= 3 && existing?.status !== "complete")
+      throw Error("UPLOAD_FAILED");
     if (existing) {
       if (
         existing.bytesTotal !== a.bytesTotal ||

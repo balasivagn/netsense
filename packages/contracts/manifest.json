@@ -39,11 +39,11 @@
     },
     {
       "path": "convex/schema.ts",
-      "sha256": "6b985dc20ff7847f81a71757c7af53135cd47e3f3dba14032a02d514cd70baae"
+      "sha256": "f629d638d0706079bff66bfbe00966f71394ec7a901a64041ea544b3e04c9416"
     },
     {
       "path": "convex/sessions.ts",
-      "sha256": "d427797c5daeac2153c2d8648299a9d738cb9949092a43ee42c4315e3afda426"
+      "sha256": "553237aaae281fefe87f3226ca648a920d8641a7ff9f9a4b4e2940f780c777c5"
     },
     {
       "path": "convex/stageRuns.ts",
@@ -55,7 +55,7 @@
     },
     {
       "path": "convex/uploads.ts",
-      "sha256": "1bdcbcccccde259482950c0e4fb3914c77dc3709d2ba74be31ccad8900226d17"
+      "sha256": "c532d20fb21a6e94a17350a49fab4a57110c482543edd9b4b2944bd2766ccc05"
     },
     {
       "path": "convex/validators.ts",

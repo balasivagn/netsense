@@ -274,6 +274,17 @@ test("browser transport preserves actual consent rejection, closed response, and
     await h.coach.mutation(api.sessions.confirmConsent, {
       sessionId: h.sessionId,
     });
+    await h.t.run((ctx) =>
+      ctx.db.patch(h.sessionId, { captureMode: undefined }),
+    );
+    expect((await h.call("init", h.init)).status).toBe(409);
+    expect(
+      await h.t.run((ctx) => ctx.db.query("uploads").collect()),
+    ).toHaveLength(0);
+    await h.coach.mutation(api.sessions.selectCaptureMode, {
+      sessionId: h.sessionId,
+      captureMode: "camera_roll",
+    });
     extra = true;
     await expect(
       transport.initialize(h.init, new AbortController().signal),
@@ -351,3 +362,135 @@ test("controller cancellation aborts actual reserved upload while signing is pen
     await h.cleanup();
   }
 });
+
+for (const tapFirst of [true, false])
+  test(`session flow seam uses actual five handlers + Convex + disk, tapFirst=${tapFirst}`, async () => {
+    const h = await harness();
+    const { SessionFlow } = await import("../session-flow/flow");
+    try {
+      // Draft route creation does not supply a capture mode. Screen 06 persists
+      // consent before any File/controller upload operation.
+      await h.t.run((ctx) =>
+        ctx.db.patch(h.sessionId, { captureMode: undefined }),
+      );
+      await h.coach.mutation(api.sessions.confirmConsent, {
+        sessionId: h.sessionId,
+      });
+      const media = await import("../../app/api/media/local/[...key]/route");
+      const routes = {
+        parts: (await import("../../app/api/uploads/[uploadId]/parts/route"))
+          .POST,
+        confirm: (
+          await import("../../app/api/uploads/[uploadId]/parts/confirm/route")
+        ).POST,
+        complete: (
+          await import("../../app/api/uploads/[uploadId]/complete/route")
+        ).POST,
+        abort: (await import("../../app/api/uploads/[uploadId]/abort/route"))
+          .POST,
+      };
+      const fetcher: typeof fetch = async (input, init) => {
+        const url = new URL(String(input), "https://web.invalid");
+        const request = new Request(url, init);
+        if (init?.method === "PUT")
+          return media.PUT(request, {
+            params: Promise.resolve({
+              key: url.pathname.replace("/api/media/local/", "").split("/"),
+            }),
+          });
+        if (url.pathname === "/api/uploads")
+          return (await import("../../app/api/uploads/route")).POST(request);
+        const op = url.pathname.endsWith("/parts/confirm")
+          ? "confirm"
+          : (url.pathname.split("/").at(-1) as keyof typeof routes);
+        return routes[op](request, {
+          params: Promise.resolve({ uploadId: url.pathname.split("/")[3] }),
+        });
+      };
+      const flow = new SessionFlow({
+        coachId: h.coachId,
+        sessionId: h.sessionId,
+        transport: createUploadTransport(fetcher),
+        recovery: browserRecoveryStore(null),
+        selectMode: (captureMode) =>
+          h.coach.mutation(api.sessions.selectCaptureMode, {
+            sessionId: h.sessionId,
+            captureMode,
+          }),
+        beginAttempt: () =>
+          h.coach.mutation(api.coachSessions.beginAttempt, {
+            sessionId: h.sessionId,
+          }),
+        failAttempt: (attempt) =>
+          h.coach.mutation(api.coachSessions.failAttempt, {
+            sessionId: h.sessionId,
+            attempt,
+          }),
+      });
+      const { File } = await import("node:buffer");
+      expect(
+        await flow.select(
+          new File([h.bytes], "synthetic", {
+            type: h.init.mimeType,
+          }) as unknown as globalThis.File,
+          "camera_roll",
+        ),
+      ).toBe(true);
+      if (tapFirst)
+        await h.coach.mutation(api.sessions.setSubject, {
+          sessionId: h.sessionId,
+          ...tap,
+        });
+      await flow.retry();
+      expect(flow.snapshot().upload?.phase).toBe("complete");
+      expect(flow.snapshot().sourceVerified).toBe(true);
+      let detail = await h.coach.query(api.coachSessions.detail, {
+        sessionId: h.sessionId,
+      });
+      expect(detail.upload?.complete).toBe(true);
+      if (!tapFirst) {
+        expect(detail.job).toBeNull();
+        // Completion clears local recovery metadata. Even then, canonical server
+        // source identity must reject a different same-size clip before tapping.
+        const wrong = Buffer.from(h.bytes);
+        wrong[0] ^= 1;
+        await flow.select(
+          new File([wrong], "synthetic", {
+            type: h.init.mimeType,
+          }) as unknown as globalThis.File,
+          "camera_roll",
+        );
+        await flow.retry();
+        expect(flow.snapshot().sourceVerified).toBe(false);
+        expect(flow.snapshot().upload?.phase).toBe("failed");
+        await flow.select(
+          new File([h.bytes], "synthetic", {
+            type: h.init.mimeType,
+          }) as unknown as globalThis.File,
+          "camera_roll",
+        );
+        await flow.retry();
+        expect(flow.snapshot().sourceVerified).toBe(true);
+        expect(flow.snapshot().upload?.phase).toBe("complete");
+        await h.coach.mutation(api.sessions.setSubject, {
+          sessionId: h.sessionId,
+          ...tap,
+        });
+      }
+      await h.coach.mutation(api.sessions.setSubject, {
+        sessionId: h.sessionId,
+        ...tap,
+      });
+      detail = await h.coach.query(api.coachSessions.detail, {
+        sessionId: h.sessionId,
+      });
+      expect(detail.job?.status).toBe("queued");
+      expect(detail.job?.coachStages.length).toBe(6);
+      expect(
+        await h.t.run((ctx) => ctx.db.query("jobs").collect()),
+      ).toHaveLength(1);
+      flow.dispose();
+    } finally {
+      await h.cleanup();
+    }
+  });

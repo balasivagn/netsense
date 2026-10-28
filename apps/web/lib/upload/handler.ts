@@ -150,6 +150,8 @@ export function uploadHandler(
         });
         if (session.consentConfirmedAt === undefined)
           return json({ error: "CONSENT_REQUIRED" }, 409);
+        if (!session.captureMode)
+          return json({ error: "CAPTURE_MODE_REQUIRED" }, 409);
         const storage = getVideoStorage();
         if (storage.driver !== "local") throw Error("SERVICE_UNAVAILABLE"); // R2 UNTESTED; fail closed.
         const u = (await service("reserve", {

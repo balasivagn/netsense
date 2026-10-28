@@ -52,12 +52,17 @@ export default defineSchema({
     subjectAnchor: v.optional(
       v.object({ box: box, frameMs: v.number(), referenceCropKey: v.string() }),
     ),
-    captureMode: v.union(
-      v.literal("camera"),
-      v.literal("camera_roll"),
-      v.literal("in_page"),
+    captureMode: v.optional(
+      v.union(
+        v.literal("camera"),
+        v.literal("camera_roll"),
+        v.literal("in_page"),
+      ),
     ),
     renderMode: renderMode,
+    uploadFailures: v.optional(v.number()),
+    uploadAttempt: v.optional(v.number()),
+    uploadAttemptActive: v.optional(v.boolean()),
     consentConfirmedAt: v.optional(v.number()),
     consentConfirmedBy: v.optional(v.string()),
     isDemoFallback: v.boolean(),
