@@ -53,7 +53,7 @@ class Lifecycle:
         env["NETSENSE_JOB_TOKEN"] = claim.jobToken
         gate = self.root / (uuid4().hex + ".start")
         env["NETSENSE_RUNNER_START_FILE"] = str(gate.resolve())
-        name = "netsense-" + claim.job.id + "-" + str(claim.job.attempt)
+        name = "ns-" + claim.job.kind + "-" + claim.job.sessionId
         spec = LocalSandboxSpec(
             name=name,
             command=(self.python, "-m", "netsense_runner", "--job", claim.job.id),
@@ -84,9 +84,11 @@ class Lifecycle:
                 durable(gate, {"sandboxId": handle_id})
                 while True:
                     try:
-                        result = handle.wait(0.2)
-                        if result != 0:
-                            self.service.fail(claim.job.id, self.owner, claim.job.attempt)
+                        handle.wait(0.2)
+                        # Exit zero is not proof that /worker/done was persisted.
+                        # The mutation preserves terminal jobs and only fails this
+                        # exact owned attempt if it is still running.
+                        self.service.fail(claim.job.id, self.owner, claim.job.attempt)
                         break
                     except LocalSandboxWaitTimeout:
                         stale = self.service.stale()

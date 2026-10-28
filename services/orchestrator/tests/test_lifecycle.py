@@ -59,10 +59,12 @@ class FixtureDriver(LocalDriver):
     def __init__(self, script: str, timeout: float = 2) -> None:
         self.script, self.timeout = script, timeout
         self.env: dict[str, str] = {}
+        self.name = ""
 
     @contextmanager
     def acquire(self, spec: LocalSandboxSpec) -> Iterator[SandboxHandle]:
         self.env = dict(spec.env)
+        self.name = spec.name
         command: tuple[str, ...] = (
             sys.executable,
             str(ROOT / "fixtures/synthetic/local_driver" / self.script),
@@ -96,12 +98,13 @@ def setup(tmp_path: Path, script: str) -> tuple[Lifecycle, ProtocolFake, Claim, 
 
 @pytest.mark.parametrize("script", ["exit_success.py", "exit_nonzero.py"])
 def test_exact_release_on_runner_exit(tmp_path: Path, script: str) -> None:
-    runtime, service, claim, _ = setup(tmp_path, script)
+    runtime, service, claim, driver = setup(tmp_path, script)
     runtime.run(claim)
+    assert driver.name == f"ns-{claim.job.kind}-{claim.job.sessionId}"
     assert len(service.releases) == 1
     assert service.releases[0]["exitCode"] == (0 if script == "exit_success.py" else 7)
     assert not service.rows
-    assert bool(service.failures) == (script == "exit_nonzero.py")
+    assert service.failures == [(claim.job.id, runtime.owner, claim.job.attempt, False)]
 
 
 def test_registration_failure_still_cleans_owned_group(tmp_path: Path) -> None:

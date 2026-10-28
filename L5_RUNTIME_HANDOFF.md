@@ -166,3 +166,19 @@ complete. Disposable logs/builds stay ignored in `.orca-scratch/`.
 - `uv tool run --from pre-commit==4.7.0 pre-commit run --all-files`: passed.
   The real staged commit hook is required and runs again on the commit, without bypass.
 - `git diff --check`: passed. No browser E2E or live vendor test was run.
+
+## Parent review — not yet integrated
+
+Parent verified the 67-test executable integration/lifecycle route suite and fixed
+two lifecycle boundaries: sandbox names now follow `ns-{kind}-{sessionId}` across
+job attempts, and every observed runner exit checks whether the exact owned job
+is still running, including exit zero without a persisted `/worker/done`. The
+guarded failure mutation preserves jobs already completed by the runner.
+
+Blocking review finding: the current stale-watch branch terminates the worker
+even when the atomic stale failure mutation is a no-op because a heartbeat has
+refreshed. Parent reproduced release with exit -9 after a declined failure.
+The service wire needs an authoritative stop decision, and the lifecycle must
+continue watching when that decision declines. Reconciliation of externally
+stopped jobs and missing cached-media lookup also need corrective coverage.
+PR remains draft; full browser M1 E2E and automatic recovery remain pending.
