@@ -1,0 +1,8 @@
+{
+  "alternates": [{"endIdx": 1, "startIdx": 0}],
+  "confidence": "high",
+  "endIdx": 1,
+  "keyIdx": 0,
+  "startIdx": 0,
+  "why": "synthetic fixture"
+}

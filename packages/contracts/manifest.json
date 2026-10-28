@@ -15,7 +15,7 @@
     },
     {
       "path": "convex/errorCodes.ts",
-      "sha256": "fd91e5b608af64a9c7fc2d69dd618cb095e0e737cdd63c9c2d26ff239f08609e"
+      "sha256": "b21a872881a1185be8bf5f264a693c46fdf3e204a45b9ffef7abe317f690d08a"
     },
     {
       "path": "convex/jobs.ts",
@@ -27,11 +27,11 @@
     },
     {
       "path": "convex/schema.ts",
-      "sha256": "87cb80dec10df413e0c6a589fa8dad50958f7f4d08ee5db7331bd3bd7b7ebd06"
+      "sha256": "a308a6f2b323111e04d02b464bae1fcb33e9d76be4af8215a98d9f94dc5a0312"
     },
     {
       "path": "convex/sessions.ts",
-      "sha256": "0eea843b317c0f3c1f5b751fc5519a2dec75448e17763138fbbc7685998669ed"
+      "sha256": "d427797c5daeac2153c2d8648299a9d738cb9949092a43ee42c4315e3afda426"
     },
     {
       "path": "convex/stageRuns.ts",
@@ -51,7 +51,7 @@
     }
   ],
   "algorithm": "sha256(filename + source bytes, sorted filenames)",
-  "digest": "51a8bd5650004181dcdb0ede8c9231fb083e8f6470e976ba0a4e0a7fbc7c0078",
+  "digest": "bf2664cdc72107f118bf7f72b194fe1fb0301e976a0ce8541485f63b60d7c948",
   "schemas": [
     "CheckInput",
     "CheckOutput",
