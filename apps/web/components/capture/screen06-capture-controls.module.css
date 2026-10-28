@@ -1,0 +1,76 @@
+.screen {
+  box-sizing: border-box;
+  margin: 0 auto;
+  max-width: 390px;
+  min-height: 100dvh;
+  padding: 20px 16px 32px;
+}
+
+.screen h1 {
+  font-size: clamp(1.75rem, 8vw, 2.25rem);
+  margin: 0 0 24px;
+}
+
+.consent {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+}
+
+.consent input {
+  flex: 0 0 auto;
+  height: 24px;
+  margin: 0;
+  width: 24px;
+}
+
+.consent label {
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.consent input:focus-visible,
+.actions button:focus-visible {
+  outline: 3px solid #4D672A;
+  outline-offset: 3px;
+}
+
+.error {
+  border: 1px solid #666;
+  margin: 16px 0 0;
+  padding: 12px;
+}
+
+.actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.actions button {
+  background: white;
+  border: 1px solid #444;
+  color: #222;
+  min-height: 48px;
+  padding: 0 16px;
+}
+
+.actions button:first-child {
+  background: #4D672A;
+  border-color: #4D672A;
+  color: white;
+}
+
+.actions button:disabled {
+  background: #e8e8e8;
+  border-color: #b0b0b0;
+  color: #666;
+}
+
+.fileInput {
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
