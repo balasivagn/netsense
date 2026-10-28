@@ -4,6 +4,7 @@ import json
 import threading
 import time
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar, TypeVar
@@ -84,7 +85,8 @@ def server() -> Iterator[tuple[str, type[Handler]]]:
     Handler.redirect = False
     Handler.responder = staticmethod(lambda _path, _body: (200, b'{"ok":true}'))
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    httpd.daemon_threads = False
+    thread = threading.Thread(target=httpd.serve_forever)
     thread.start()
     try:
         yield f"http://127.0.0.1:{httpd.server_port}", Handler
@@ -233,12 +235,16 @@ def test_limits_timeout_redirect_and_concurrency(server: tuple[str, type[Handler
             self.send_response(200)
             self.end_headers()
             for piece in (b"{", b'"ok":', b"true", b"}"):
-                self.wfile.write(piece)
-                self.wfile.flush()
+                try:
+                    self.wfile.write(piece)
+                    self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    return
                 time.sleep(0.04)
 
     slow = ThreadingHTTPServer(("127.0.0.1", 0), SlowHandler)
-    thread = threading.Thread(target=slow.serve_forever, daemon=True)
+    slow.daemon_threads = False
+    thread = threading.Thread(target=slow.serve_forever)
     thread.start()
     try:
         with pytest.raises(WorkerClientError, match="^TIMEOUT$"):
@@ -271,14 +277,19 @@ def test_limits_timeout_redirect_and_concurrency(server: tuple[str, type[Handler
         return 200, b'{"ok":true}'
 
     handler.responder = delayed
-    blocked = threading.Thread(target=lambda: client(url).get_job())
-    blocked.start()
-    assert entered.wait(timeout=1)
-    started = time.monotonic()
-    client(url).heartbeat()
-    assert time.monotonic() - started < 0.5
-    release.set()
-    blocked.join(timeout=1)
+    shared = client(url)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        blocked = pool.submit(shared.get_job)
+        try:
+            assert entered.wait(timeout=1)
+            started = time.monotonic()
+            shared.heartbeat()
+            assert time.monotonic() - started < 0.5
+            assert not blocked.done()
+        finally:
+            release.set()
+        assert blocked.result(timeout=1).job.id
+
 
 
 @pytest.mark.parametrize("origin", ["https://x/path", "https://x?y=1", "https://u:p@x", "ftp://x"])
