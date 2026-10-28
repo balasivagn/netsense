@@ -127,3 +127,9 @@ All media/tracks in these tests are synthetic, generated locally; no paid/vendor
 calls or real clips.
 Live/R2 integration, full app E2E (no `pnpm e2e` script yet), final approval snapshot,
 T1.26 wiring and parent DAG integration remain UNTESTED / out of lane scope.
+
+Two intermediate full-check reruns failed in untouched parent-owned JS tests:
+`worker-sign.test.ts` returned 503 under its 15 ms test deadline, and
+`consent.test.ts` had a 1 ms timestamp-boundary assertion failure. Both had passed
+in earlier full checks. They are recorded for parent follow-up; no auth/web/Convex
+files were changed to hide or loosen them.
