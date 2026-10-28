@@ -85,6 +85,16 @@ export default defineSchema({
     bytesConfirmed: v.number(),
     partSize: v.number(),
     partsConfirmed: v.array(v.number()),
+    confirmedParts: v.optional(
+      v.array(
+        v.object({
+          partNumber: v.number(),
+          etag: v.string(),
+          bytes: v.number(),
+        }),
+      ),
+    ),
+    phase: v.optional(v.union(v.literal("completing"), v.literal("aborting"))),
     sha256: v.string(),
     status: v.union(
       v.literal("in_progress"),

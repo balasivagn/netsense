@@ -590,7 +590,7 @@ Document limit is 1 MiB: tracks, masks, key frames and renders live in storage; 
 | `coaches` | `clerkUserId`, `displayName`, `createdAt` | `by_clerkUserId` |
 | `students` | `coachId`, `label` (first name or nickname), `contactMasked?` (e.g. `+65 •••• 21`, optional), `createdAt` | `by_coachId` |
 | `sessions` | `coachId`, `studentId: v.id("students")` (who the lesson is for), `subjectRole: "batter"\|"bowler"\|"other"`, `subject?: Subject` (§7 common types; tapped on 07a), `subjectStatus: "needed"\|"set"\|"anchored"\|"anchor_failed"`, `subjectAnchor?: {box, frameMs, referenceCropKey}`, `captureMode: "camera"\|"camera_roll"\|"in_page"`, `renderMode: "video"\|"stills"`, `consentConfirmedAt?: number` (ms; set by the screen 06 checkbox, C-C), `consentConfirmedBy?: string` (Clerk user ID of the confirming coach), `isDemoFallback: boolean` (§22.4), `status: "draft"\|"uploading"\|"processing"\|"needs_you"\|"review_ready"\|"shared"\|"failed"`, `latestJobId?`, `durationMs?`, `createdAt` | `by_coachId_createdAt` |
-| `uploads` | `sessionId`, `coachId`, `storageKey`, `driver: "r2"\|"local"`, `multipartUploadId?`, `mimeType`, `bytesTotal`, `bytesConfirmed`, `partSize`, `partsConfirmed: number[]`, `sha256`, `status: "in_progress"\|"paused"\|"complete"\|"failed"\|"aborted"`, `attempts`, `createdAt`, `completedAt?` | `by_sessionId` |
+| `uploads` | `sessionId`, `coachId`, `storageKey`, `driver: "r2"\|"local"`, `multipartUploadId?`, `mimeType`, `bytesTotal`, `bytesConfirmed`, `partSize`, `partsConfirmed: number[]`, `confirmedParts?: {partNumber,etag,bytes}[]`, `phase?: "completing"\|"aborting"`, `sha256`, `status: "in_progress"\|"paused"\|"complete"\|"failed"\|"aborted"`, `attempts`, `createdAt`, `completedAt?` | `by_sessionId` |
 | `pipeline_config` | `version`, `active: boolean`, `stages: StageConfig[]` (§17), `coachStages`, `limits`, `createdAt`, `note` | `by_version`, `by_active` |
 | `jobs` | `sessionId`, `coachId`, `kind: "pipeline"\|"subject_retrack"\|"remark_retrack"\|"stage_retry"\|"finalize"`, `remarkId?`, `stage?`, `configVersion` (pinned at creation), `status: "queued"\|"running"\|"done"\|"failed"\|"waiting_for_coach"\|"cancelled"`, `coachStage`, `progress?`, `progressLabel?`, `errorCode?`, `attempt`, `maxAttempts`, `leaseOwner?`, `leaseUntil?`, `heartbeatAt?`, `sandboxId?`, `sandboxName?`, `lastStageDone?`, `samFrames`, `inputTokens`, `outputTokens`, `costUsd`, `createdAt`, `startedAt?`, `endedAt?` | `by_status_createdAt`, `by_sessionId` |
 | `sandboxes` | `jobId`, `sandboxId`, `sandboxName`, `driver: "modal"\|"local"`, `createdAt`, `terminatedAt?`, `terminatedBy?: "orchestrator"\|"sweeper"\|"timeout"\|"self"`, `exitCode?` | `by_jobId`, `by_terminatedAt` |
@@ -654,8 +654,83 @@ Key Convex functions (TypeScript, `convex/`):
 | `POST /api/uploads` | coach | `{sessionId, fileName, mimeType, bytesTotal, sha256}` → `{uploadId, partSize, partCount, resumeFrom: number[]}`. Starts multipart (R2) or a local temp file. Matching `sha256` for the same session resumes. Rejects with `409 CONSENT_REQUIRED` unless `sessions.consentConfirmedAt` is set (C-C). |
 | `POST /api/uploads/[uploadId]/parts` | coach | `{partNumbers: number[]}` → `{urls: [{partNumber, url, expiresAt}]}` (presigned PUT, TTL 15 min) |
 | `POST /api/uploads/[uploadId]/parts/confirm` | coach | `{partNumber, etag, bytes}` → `{bytesConfirmed}` (progress counts confirmed parts only) |
-| `POST /api/uploads/[uploadId]/complete` | coach | `{}` → `{jobId}`. Completes multipart, `HEAD` checks size = `bytesTotal`, then `jobs.enqueue(kind="pipeline")` **only if `sessions.subject` is set**; otherwise the session waits in `subjectStatus = "needed"` and `sessions.setSubject` enqueues. SHA-256 is verified by `transcode`. |
+| `POST /api/uploads/[uploadId]/complete` | coach | `{}` → `{jobId: string|null}` (`null` while waiting for the subject tap). Completes multipart, `HEAD` checks size = `bytesTotal`, then `jobs.enqueue(kind="pipeline")` **only if `sessions.subject` is set**; otherwise the session waits in `subjectStatus = "needed"` and `sessions.setSubject` enqueues. SHA-256 is verified by `transcode`. |
 | `POST /api/uploads/[uploadId]/abort` | coach | → `{}` (asks first in the UI) |
+
+#### Local upload backend boundary (T1.06 / T1.37 partial)
+
+All five upload POST bodies are closed JSON objects, at most 32 KiB with a
+10-second streamed-body deadline. Abort also requires `{}`. Unauthenticated
+requests return `401 {error:"UNAUTHENTICATED"}`; absent stored consent returns
+`409 {error:"CONSENT_REQUIRED"}` before any storage call. Invalid size/MIME/hash
+returns `400 {error:"INVALID_REQUEST"}`; other rejected operations expose only
+`409 {error:"UPLOAD_REJECTED"}` (including foreign/missing rows). Missing private
+service configuration returns `503 {error:"SERVICE_UNAVAILABLE"}`. Responses use
+`Cache-Control: no-store`; no upload path logs payloads, identities or URLs.
+
+The local slice accepts integer `bytesTotal` in 1..5 GiB and MIME `video/mp4`,
+`video/quicktime`, or `video/webm`. SHA-256 is lowercase 64 hex. `fileName` is
+validated as a nonempty string <=1024 characters and never used as a storage key.
+Parts are 8 MiB except the final remainder; signing accepts 1..32 unique part
+numbers within `ceil(bytesTotal/partSize)`, with a 900-second TTL. Source keys are
+`sessions/<sessionId>/source/original`. One source
+identity is reserved per session: matching SHA/size/MIME resumes, conflicting
+identity is rejected. Aborted/failed uploads remain terminal; re-init never
+reopens them. Completed re-init returns the existing confirmed progress.
+
+Next calls `getCoachRouteAuth`, then uses its Convex token for `sessions.get` or
+owner-only `uploads.owned({uploadId})`. It takes `coachId` from the owned row,
+never from the request. Storage measurements are server-only. The private bridge
+is `POST ${CONVEX_SITE_URL}/svc/uploads/<operation>`, authenticated with
+`Authorization: Bearer ${CONVEX_SERVICE_SECRET}` from server env. These endpoints
+call INTERNAL mutations, repeat session/upload ownership and stored consent
+checks, and never accept Clerk/browser authorization as service authorization.
+Closed private request/response wires:
+
+| operation | request | response |
+|---|---|---|
+| reserve | `{sessionId,coachId,sha256,mimeType,bytesTotal,multipartUploadId}` | authoritative upload document |
+| confirm | `{uploadId,coachId,partNumber,etag,bytes}` | `{bytesConfirmed}` |
+| begin | `{uploadId,coachId,operation:"completing"|"aborting"}` | authoritative upload document |
+| complete | `{uploadId,coachId,verifiedBytes}` | `{jobId:string|null}` |
+| abort | `{uploadId,coachId}` | `{}` |
+
+An authoritative upload document contains the §9 upload fields plus Convex
+`_id`/`_creationTime`; optional `confirmedParts:[{partNumber,etag,bytes}]` and
+`phase:"completing"|"aborting"` are added. Legacy rows may lack these optional
+fields. New reservations persist a server-generated UUID before touching disk.
+Private requests are bounded to 32 KiB/10 seconds; private responses to 256 KiB;
+authenticated Convex query responses to 1 MiB. Next service/query fetches have
+10-second deadlines, disable redirects and disable Convex client logging.
+
+Reservation is transactional and returns the winning UUID on duplicate init,
+including a lost response; losers never create storage. `initMultipart` accepts
+an optional reserved UUID and is idempotent for that key/type/UUID. Local
+`inspectPart` returns actual disk length and SHA-256 ETag under the storage lock.
+Browser `bytes`/`etag` must equal those measurements; Convex checks the exact
+expected part length and deduplicates matching confirmations. Every local part
+is immutable from first PUT (byte-identical retries succeed); multipart PUTs
+are capped at 8 MiB. Confirmed metadata and progress survive reload.
+
+`begin` atomically reserves completing or aborting; competing operations fail,
+while identical retries continue the winning transition. Completing requires all
+parts confirmed. After idempotent assembly, Next checks actual HEAD size and
+only then persists complete/enqueues. A response lost after disk or DB success
+is retryable; local assembly recovers an existing byte-identical object even
+if its completion metadata write was interrupted. Aborting removes parts before
+persisting terminal state; retries also recover disk-success/DB-failure, including
+reservation before initial storage creation. The first reserved transition wins
+an abort/complete race. Completing reservations remain retryable on transient
+failures; disk corruption requires operator repair before retry. Init/abort races
+share the same UUID and local storage lock, leaving an aborted tombstone rather
+than an orphan multipart directory. `enqueueReady` and subject selection serialize
+transactionally, so either tap order creates exactly one pipeline job. No
+pre-tap processing is introduced.
+
+Local locking supports the existing single web-process deployment only. R2 is
+**UNTESTED and unavailable** in this slice; the configured R2 adapter fails
+closed. UI consent/progress wiring, selection-frame fallback, real Clerk login,
+and Playwright/M1 E2E remain pending; T1.06/T1.37 are PARTIAL.
 | `PUT /api/media/local/[...key]` | HMAC signed URL | local driver only: receives a part or file |
 | `GET /api/media/local/[...key]` | HMAC signed URL | local driver only: serves with `Range` support |
 | `POST /api/media/sign` | coach | `{sessionId, asset: "proxy"\|"preview"\|"final"\|"audio"\|"still:{annotationId}"\|"track:{remarkId}"}` → `{url, expiresAt}` (TTL `SIGNED_URL_TTL_SECONDS`, default 600) |
@@ -737,7 +812,9 @@ S1, decided by Bala 28 Oct (relayed via Chief of Staff): **Cloudflare R2**, a pr
 // apps/web/lib/storage/types.ts
 export interface VideoStorage {
   driver: "r2" | "local";
-  initMultipart(key: string, contentType: string): Promise<{ uploadId: string }>;
+  initMultipart(key: string, contentType: string, reservedId?: string): Promise<{ uploadId: string }>;
+  // Local-only authoritative inspection; R2 remains UNTESTED/unavailable.
+  inspectPart?(key: string, uploadId: string, partNumber: number): Promise<{ bytes: number; etag: string }>;
   signPartUrls(key: string, uploadId: string, partNumbers: number[], ttlS: number): Promise<{ partNumber: number; url: string; expiresAt: number }[]>;
   completeMultipart(key: string, uploadId: string, parts: { partNumber: number; etag: string }[]): Promise<void>;
   abortMultipart(key: string, uploadId: string): Promise<void>;
@@ -747,7 +824,7 @@ export interface VideoStorage {
   delete(keyOrPrefix: string): Promise<void>;
 }
 ```
-Key layout: `sessions/{sessionId}/source/{uploadId}`, `.../proxy.mp4`, `.../audio/{n}.wav`, `.../audio.m4a`, `.../keyframes/{idx}.jpg`, `.../keyframes.json`, `.../windows/{remarkId}.mp4`, `.../tracks/{remarkId}.json`, `.../masks/{remarkId}.bin`, `.../renders/{kind}/{segmentId}-{hash}.mp4`, `.../renders/{kind}/full.mp4`, `.../stills/{annotationId}.jpg`. Render segment keys include the annotation-content hash so an older segment reference cannot alias bytes overwritten by a later edit. FileRef consumers also accept validated, canonical immutable run-artifact keys inside the same session.
+Key layout: local source `sessions/{sessionId}/source/original` (§10.2 reservation); planned R2 source `sessions/{sessionId}/source/{uploadId}` (UNTESTED), `.../proxy.mp4`, `.../audio/{n}.wav`, `.../audio.m4a`, `.../keyframes/{idx}.jpg`, `.../keyframes.json`, `.../windows/{remarkId}.mp4`, `.../tracks/{remarkId}.json`, `.../masks/{remarkId}.bin`, `.../renders/{kind}/{segmentId}-{hash}.mp4`, `.../renders/{kind}/full.mp4`, `.../stills/{annotationId}.jpg`. Render segment keys include the annotation-content hash so an older segment reference cannot alias bytes overwritten by a later edit. FileRef consumers also accept validated, canonical immutable run-artifact keys inside the same session.
 
 - **R2 adapter**: AWS SDK v3 S3 client, `endpoint = R2_ENDPOINT`, `region = "auto"`. Bucket private; CORS allows `PUT` from `APP_BASE_URL` and exposes `ETag`. Part size 8 MiB (5–10 MB guidance). Signed GETs use `ResponseContentDisposition: inline`.
 - **Local adapter**: files under `LOCAL_STORAGE_DIR` (`/data/netsense` on the VM); multipart parts as `key.parts/{n}`; signed URLs are `/api/media/local/{key}?exp=..&sig=HMAC(MEDIA_URL_SIGNING_SECRET, method|key|exp)`; GET supports `Range` for video seeking.

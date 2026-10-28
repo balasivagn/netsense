@@ -64,23 +64,31 @@ export function object<S extends Record<string, Parser<unknown>>>(
 export async function readBody(
   request: Request,
   limit = 32_768,
+  timeoutMs?: number,
 ): Promise<unknown> {
   const reader = request.body?.getReader();
   if (!reader) return reject();
   const chunks: Uint8Array[] = [];
   let size = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    if (timeoutMs)
+      timer = setTimeout(() => reject(Error("INVALID_REQUEST")), timeoutMs);
+  });
   try {
     while (true) {
-      const { value, done } = await reader.read();
+      const { value, done } = await Promise.race([reader.read(), expired]);
       if (done) break;
       size += value.byteLength;
       if (size > limit) {
-        await reader.cancel();
+        void reader.cancel().catch(() => undefined);
         return reject();
       }
       chunks.push(value);
     }
   } finally {
+    clearTimeout(timer);
+    void reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
   const bytes = new Uint8Array(size);

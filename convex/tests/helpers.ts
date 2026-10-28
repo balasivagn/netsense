@@ -10,7 +10,7 @@ export const tap = fixture.subject as Omit<
   Infer<typeof subjectValidator>,
   "selectedBy" | "selectedAt"
 >;
-export async function setup() {
+export async function setup(prepareUpload = true) {
   const t = convexTest(schema, modules);
   await t.mutation(internal.config.seed, {});
   const coach = t.withIdentity(data.identity);
@@ -25,9 +25,12 @@ export async function setup() {
     subjectRole: "batter",
     captureMode: "camera_roll",
   });
+  if (prepareUpload)
+    await coach.mutation(api.sessions.confirmConsent, { sessionId });
   const uploadId = await t.run((ctx) =>
     ctx.db.insert("uploads", {
       ...data.upload,
+      phase: "completing",
       driver: "local",
       status: "in_progress",
       sessionId,

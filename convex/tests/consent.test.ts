@@ -3,7 +3,7 @@ import { api } from "../_generated/api";
 import { data, setup } from "./helpers";
 
 test("sessions have no consent confirmation until their owner confirms", async () => {
-  const { t, coach, sessionId } = await setup();
+  const { t, coach, sessionId } = await setup(false);
   const before = await t.run((ctx) => ctx.db.get(sessionId));
   expect(before?.consentConfirmedAt).toBeUndefined();
   expect(before?.consentConfirmedBy).toBeUndefined();
@@ -24,7 +24,7 @@ test("sessions have no consent confirmation until their owner confirms", async (
 });
 
 test("only an authenticated, registered owner may confirm without writing", async () => {
-  const { t, other, sessionId } = await setup();
+  const { t, other, sessionId } = await setup(false);
   const unregistered = t.withIdentity({ subject: "synthetic-unregistered" });
   const before = await t.run((ctx) => ctx.db.get(sessionId));
 
@@ -42,7 +42,7 @@ test("only an authenticated, registered owner may confirm without writing", asyn
 });
 
 test("confirmation ignores caller-supplied identity and time and remains immutable", async () => {
-  const { t, coach, sessionId } = await setup();
+  const { t, coach, sessionId } = await setup(false);
   await expect(
     coach.mutation(api.sessions.confirmConsent, {
       sessionId,
@@ -70,7 +70,7 @@ test("confirmation ignores caller-supplied identity and time and remains immutab
 });
 
 test("concurrent owner confirmations preserve one first confirmation", async () => {
-  const { t, coach, sessionId } = await setup();
+  const { t, coach, sessionId } = await setup(false);
   await Promise.all([
     coach.mutation(api.sessions.confirmConsent, { sessionId }),
     coach.mutation(api.sessions.confirmConsent, { sessionId }),

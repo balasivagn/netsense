@@ -1,6 +1,15 @@
 export interface VideoStorage {
   driver: "r2" | "local";
-  initMultipart(key: string, contentType: string): Promise<{ uploadId: string }>;
+  initMultipart(
+    key: string,
+    contentType: string,
+    reservedId?: string,
+  ): Promise<{ uploadId: string }>;
+  inspectPart?(
+    key: string,
+    uploadId: string,
+    partNumber: number,
+  ): Promise<{ bytes: number; etag: string }>;
   signPartUrls(
     key: string,
     uploadId: string,

@@ -93,7 +93,11 @@ function post(
       if (!token) return safeError(401, "UNAUTHORIZED");
       let input: unknown;
       try {
-        input = await readBody(request, limit);
+        input = await readBody(
+          request,
+          limit,
+          path.startsWith("/svc/uploads/") ? 10000 : undefined,
+        );
       } catch {
         return safeError(400, "INVALID_REQUEST");
       }
@@ -341,5 +345,48 @@ post(
       ...object(input, { stageRunId: id("stageRuns"), output: parseRender }),
     }),
   1_048_576,
+);
+const uploadOwner = { uploadId: id("uploads"), coachId: id("coaches") };
+post("/svc/uploads/reserve", "service", (ctx, input) =>
+  ctx.runMutation(
+    internal.uploads.reserve,
+    object(input, {
+      sessionId: id("sessions"),
+      coachId: id("coaches"),
+      sha256: string,
+      mimeType: string,
+      bytesTotal: integer,
+      multipartUploadId: string,
+    }),
+  ),
+);
+post("/svc/uploads/confirm", "service", (ctx, input) =>
+  ctx.runMutation(
+    internal.uploads.confirm,
+    object(input, {
+      ...uploadOwner,
+      partNumber: integer,
+      bytes: integer,
+      etag: string,
+    }),
+  ),
+);
+post("/svc/uploads/begin", "service", (ctx, input) =>
+  ctx.runMutation(
+    internal.uploads.begin,
+    object(input, {
+      ...uploadOwner,
+      operation: enumeration(["completing", "aborting"]),
+    }),
+  ),
+);
+post("/svc/uploads/complete", "service", async (ctx, input) => ({
+  jobId: await ctx.runMutation(
+    internal.uploads.complete,
+    object(input, { ...uploadOwner, verifiedBytes: integer }),
+  ),
+}));
+post("/svc/uploads/abort", "service", (ctx, input) =>
+  ctx.runMutation(internal.uploads.abort, object(input, uploadOwner)),
 );
 export default http;
