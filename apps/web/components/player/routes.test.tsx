@@ -10,6 +10,9 @@ import {
 } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { getFunctionName, type FunctionReference } from "convex/server";
+import { verifyRange } from "../../lib/review/verify";
+import { validateTrack } from "../../lib/overlay/track";
+import verificationFixture from "../../../../fixtures/synthetic/review-verification.json";
 import { api } from "../../../../convex/_generated/api";
 import { reviewReady } from "../../../../convex/tests/reviewHelpers";
 import type { Playback } from "../../lib/overlay/draw";
@@ -43,6 +46,8 @@ vi.mock("convex/react", () => ({
       args,
     ),
 }));
+vi.mock("../../lib/review/client", () => ({ verifyAndApprove: vi.fn() }));
+import { verifyAndApprove } from "../../lib/review/client";
 vi.mock("../../lib/coach-media/client", () => ({ loadMedia: vi.fn() }));
 import { loadMedia } from "../../lib/coach-media/client";
 import Layout from "../../app/sessions/[id]/layout";
@@ -61,6 +66,43 @@ afterEach(() => {
 });
 async function harness() {
   const c = await reviewReady();
+  vi.mocked(verifyAndApprove).mockImplementation(
+    async (annotationId, expectedUpdatedAt, expectedRevision) => {
+      const input = await c.coach.query(api.review.approvalInput, {
+        annotationId: annotationId as typeof c.id,
+        expectedUpdatedAt,
+        expectedRevision,
+      });
+      if (input.mode !== "note_only")
+        verifyRange(
+          validateTrack(
+            verificationFixture.track,
+            c.f.transcode.width,
+            c.f.transcode.height,
+            c.f.transcode.durationMs,
+          ),
+          input.startMs,
+          input.endMs,
+          input.minMarkCoverage,
+          input.mode,
+          input.keyframeMs,
+        );
+      const r = await c.t.fetch("/svc/review/approve", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${process.env.CONVEX_SERVICE_SECRET}`,
+        },
+        body: JSON.stringify({
+          annotationId,
+          expectedUpdatedAt,
+          state: input.state,
+          expiresAt: Date.now() + 10000,
+          coachId: input.coachId,
+        }),
+      });
+      if (!r.ok) throw Error("REVIEW_CONFLICT");
+    },
+  );
   state.id = c.sessionId;
   state.user = c.view.ownerUserId;
   state.playback = c.view;
@@ -173,12 +215,18 @@ test("actual review route approve/edit/delete/undo and separate correction persi
   fireEvent.change(screen.getByLabelText("Position"), {
     target: { value: "box_bottom" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Save placement" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save and approve" }));
   await waitFor(async () =>
     expect(
       (await c.coach.query(api.playback.get, { sessionId: c.sessionId }))
         .annotations[0].placedBy,
     ).toBe("coach"),
+  );
+  await waitFor(async () =>
+    expect(
+      (await c.coach.query(api.playback.get, { sessionId: c.sessionId }))
+        .annotations[0].status,
+    ).toBe("approved"),
   );
   await c.refresh();
   ui.rerender(
@@ -186,7 +234,7 @@ test("actual review route approve/edit/delete/undo and separate correction persi
       <ReviewPage />
     </Layout>,
   );
-  fireEvent.click(screen.getByRole("button", { name: "Needs you (1)" }));
+  fireEvent.click(screen.getByRole("button", { name: "Approved (1)" }));
   fireEvent.click(screen.getByRole("button", { name: "Delete" }));
   await waitFor(async () =>
     expect(
@@ -399,7 +447,9 @@ test("Hear coach does not skip original speech when its media clock stalls", asy
   const audio = document.createElement("audio");
   vi.spyOn(audio, "play").mockResolvedValue();
   const pause = vi.spyOn(audio, "pause").mockImplementation(() => {});
-  vi.stubGlobal("Audio", function () { return audio; });
+  vi.stubGlobal("Audio", function () {
+    return audio;
+  });
   render(<HearCoach sessionId={c.sessionId} remark={c.view.remarks[0]} />);
   fireEvent.click(screen.getByRole("button", { name: "Hear coach" }));
   await waitFor(() => expect(audio.onloadedmetadata).not.toBeNull());
@@ -408,14 +458,152 @@ test("Hear coach does not skip original speech when its media clock stalls", asy
   try {
     fireEvent.playing(audio);
     const turn = c.view.remarks[0].turns[0];
-    await act(async () => { await vi.advanceTimersByTimeAsync(turn.endMs - turn.startMs + 100); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(turn.endMs - turn.startMs + 100);
+    });
     expect(pause).not.toHaveBeenCalled();
     fireEvent.waiting(audio);
-    await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
     expect(pause).not.toHaveBeenCalled();
     fireEvent.playing(audio);
     audio.currentTime = turn.endMs / 1000;
     fireEvent.timeUpdate(audio);
     expect(pause).toHaveBeenCalled();
-  } finally { vi.useRealTimers(); }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+test("retime route controls save and verify a range; failed actual coverage remains draft and retryable, original words restore", async () => {
+  const c = await harness();
+  const ui = render(
+    <Layout>
+      <ReviewPage />
+    </Layout>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Edit / Move" }));
+  fireEvent.click(screen.getByRole("button", { name: "+0.5 s" }));
+  expect(
+    (screen.getByLabelText("Start (milliseconds)") as HTMLInputElement).value,
+  ).toBe("600");
+  fireEvent.click(screen.getByRole("button", { name: "−0.5 s" }));
+  fireEvent.change(screen.getByLabelText("Drag start"), {
+    target: { value: "200" },
+  });
+  fireEvent.change(screen.getByLabelText("Drag end"), {
+    target: { value: "1000" },
+  });
+  fireEvent.change(screen.getByLabelText("Label"), {
+    target: { value: "Batter" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save and approve" }));
+  await waitFor(async () =>
+    expect(
+      (await c.coach.query(api.playback.get, { sessionId: c.sessionId }))
+        .annotations[0].status,
+    ).toBe("approved"),
+  );
+  await c.refresh();
+  ui.rerender(
+    <Layout>
+      <ReviewPage />
+    </Layout>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Approved (1)" }));
+  expect(screen.queryByText(/unavailable for approval/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Edit / Move" }));
+  fireEvent.change(screen.getByLabelText("Label"), {
+    target: { value: "original" },
+  });
+  fireEvent.change(screen.getByLabelText("End (milliseconds)"), {
+    target: { value: "1900" },
+  });
+  fireEvent.change(screen.getByLabelText("Start (milliseconds)"), {
+    target: { value: "1100" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save and approve" }));
+  await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+  const failed = await c.coach.query(api.playback.get, {
+    sessionId: c.sessionId,
+  });
+  expect(failed.annotations[0].status).toBe("needs_you");
+  expect(failed.annotations[0].labelText).toBe(c.view.annotations[0].labelText);
+  // Feed the real query update back while staying in the same editor.
+  await c.refresh();
+  ui.rerender(
+    <Layout>
+      <ReviewPage />
+    </Layout>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Needs you (1)" }));
+  fireEvent.click(screen.getByRole("button", { name: "Edit / Move" }));
+  fireEvent.change(screen.getByLabelText("Start (milliseconds)"), {
+    target: { value: "200" },
+  });
+  fireEvent.change(screen.getByLabelText("End (milliseconds)"), {
+    target: { value: "1000" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save and approve" }));
+  await waitFor(async () =>
+    expect(
+      (await c.coach.query(api.playback.get, { sessionId: c.sessionId }))
+        .annotations[0].status,
+    ).toBe("approved"),
+  );
+});
+test("editor confirmation cannot overwrite a concurrently edited mark", async () => {
+  const c = await harness();
+  const ui = render(
+    <Layout>
+      <ReviewPage />
+    </Layout>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Edit / Move" }));
+  await c.coach.mutation(api.review.move, {
+    annotationId: c.id,
+    anchor: "box_bottom",
+    startMs: 200,
+    endMs: 1000,
+  });
+  await c.refresh();
+  ui.rerender(
+    <Layout>
+      <ReviewPage />
+    </Layout>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Save and approve" }));
+  await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+  const current = await c.coach.query(api.playback.get, {
+    sessionId: c.sessionId,
+  });
+  expect(current.annotations[0].anchor).toBe("box_bottom");
+  expect(current.annotations[0].status).toBe("needs_you");
+});
+test("late verification result cannot close another login or session editor", async () => {
+  await harness();
+  let finish: (() => void) | undefined;
+  vi.mocked(verifyAndApprove).mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const ui = render(
+    <Layout>
+      <ReviewPage />
+    </Layout>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+  const oldSignal = vi.mocked(verifyAndApprove).mock.calls.at(-1)![3]!;
+  state.login = "changed-login";
+  ui.rerender(
+    <Layout>
+      <ReviewPage />
+    </Layout>,
+  );
+  expect(oldSignal.aborted).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Edit / Move" }));
+  await act(async () => finish!());
+  expect(screen.getByRole("button", { name: "Save and approve" })).toBeTruthy();
 });

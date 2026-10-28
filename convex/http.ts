@@ -410,4 +410,16 @@ post("/svc/uploads/complete", "service", async (ctx, input) => ({
 post("/svc/uploads/abort", "service", (ctx, input) =>
   ctx.runMutation(internal.uploads.abort, object(input, uploadOwner)),
 );
+post("/svc/review/approve", "service", (ctx, input) =>
+  ctx.runMutation(
+    internal.review.commitVerified,
+    object(input, {
+      annotationId: id("annotations"),
+      coachId: id("coaches"),
+      state: string,
+      expectedUpdatedAt: integer,
+      expiresAt: integer,
+    }),
+  ),
+);
 export default http;

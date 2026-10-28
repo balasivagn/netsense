@@ -1,14 +1,29 @@
 import { v } from "convex/values";
-import { mutation, type MutationCtx } from "./_generated/server";
+import {
+  mutation,
+  query,
+  internalMutation,
+  type QueryCtx,
+  type MutationCtx,
+} from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { canonical } from "../packages/contracts/validateSchema";
 import { ownedSession } from "./lib/auth";
 import { markType, anchor, arrow, span, neutral } from "./validators";
+import { projectPlayback } from "./playback";
 import { sliceCoachSpan } from "../packages/contracts/utf16";
 
-async function item(ctx: MutationCtx, id: Id<"annotations">) {
+async function item(
+  ctx: QueryCtx,
+  id: Id<"annotations">,
+  owner?: Id<"coaches">,
+) {
   const a = await ctx.db.get(id);
   if (!a) throw Error("NOT_FOUND");
-  const s = await ownedSession(ctx, a.sessionId);
+  const s = owner
+    ? await ctx.db.get(a.sessionId)
+    : await ownedSession(ctx, a.sessionId);
+  if (!s || (owner && s.coachId !== owner)) throw Error("NOT_FOUND");
   if (a.coachId !== s.coachId) throw Error("NOT_FOUND");
   const j = s.latestJobId ? await ctx.db.get(s.latestJobId) : null;
   if (
@@ -44,9 +59,10 @@ async function changedAt(ctx: MutationCtx, a: Doc<"annotations">) {
   );
 }
 async function valid(
-  ctx: MutationCtx,
+  ctx: QueryCtx,
   x: Awaited<ReturnType<typeof item>>,
   a: Doc<"annotations">,
+  observationsWillBeChecked = false,
 ) {
   const { s, r } = x;
   if (
@@ -156,10 +172,11 @@ async function valid(
         t.remarkId === r.remarkId &&
         t.role === s.subjectRole &&
         t.fileRef === trackRun.persistedTrackBinding?.fileRef &&
-        t.coverage >= config.params.minMarkCoverage &&
+        (observationsWillBeChecked ||
+          t.coverage >= config.params.minMarkCoverage) &&
         (r.mode !== "tracked" || t.mode === "video"),
     ) ||
-    (a.placedBy === "ai" && !a.checkVerdict?.pass)
+    (!observationsWillBeChecked && a.placedBy === "ai" && !a.checkVerdict?.pass)
   )
     throw Error("TRACK_UNAVAILABLE");
 }
@@ -203,9 +220,24 @@ const placement = {
   neutralLabel: v.optional(neutral),
 };
 export const edit = mutation({
-  args: { annotationId: v.id("annotations"), ...placement },
+  args: {
+    annotationId: v.id("annotations"),
+    expectedUpdatedAt: v.optional(v.number()),
+    expectedRevision: v.optional(v.string()),
+    ...placement,
+  },
   handler: async (ctx, args) => {
     const x = await item(ctx, args.annotationId);
+    if (
+      args.expectedRevision !== undefined &&
+      (await projectPlayback(ctx, x.s._id)).revision !== args.expectedRevision
+    )
+      throw Error("REVIEW_CONFLICT");
+    if (
+      args.expectedUpdatedAt !== undefined &&
+      args.expectedUpdatedAt !== x.a.updatedAt
+    )
+      throw Error("REVIEW_CONFLICT");
     if (x.a.status === "deleted") throw Error("DELETED");
     let labelText: string;
     if (args.labelSpan) {
@@ -235,9 +267,18 @@ export const edit = mutation({
           ? `Remark ${rs.findIndex((r) => r._id === x.r._id) + 1}`
           : (args.neutralLabel ?? "");
     }
-    const { annotationId, mode, ...fields } = args;
+    const {
+      annotationId,
+      mode,
+      expectedUpdatedAt: _expected,
+      expectedRevision: _revision,
+      ...fields
+    } = args;
+    void _expected;
+    void _revision;
     const modeChanged = mode !== undefined && mode !== x.r.mode;
-    const changed = modeChanged ||
+    const changed =
+      modeChanged ||
       JSON.stringify([
         fields.markType,
         fields.anchor,
@@ -246,14 +287,14 @@ export const edit = mutation({
         fields.endMs,
         labelText,
       ]) !==
-      JSON.stringify([
-        x.a.markType,
-        x.a.anchor,
-        x.a.arrowFrom,
-        x.a.startMs,
-        x.a.endMs,
-        x.a.labelText,
-      ]);
+        JSON.stringify([
+          x.a.markType,
+          x.a.anchor,
+          x.a.arrowFrom,
+          x.a.startMs,
+          x.a.endMs,
+          x.a.labelText,
+        ]);
     const next = {
       ...x.a,
       ...fields,
@@ -263,23 +304,36 @@ export const edit = mutation({
       labelText,
       placedBy: changed ? ("coach" as const) : x.a.placedBy,
     };
-    await valid(ctx, { ...x, r: { ...x.r, mode: mode ?? x.r.mode } }, next);
+    await valid(
+      ctx,
+      { ...x, r: { ...x.r, mode: mode ?? x.r.mode } },
+      next,
+      true,
+    );
     if (modeChanged) {
       // Mode belongs to the remark, so every sibling placement changes too.
       // Clear affected approvals; each mark still requires individual approval.
       await ctx.db.patch(x.r._id, { mode });
-      const siblings = await ctx.db.query("annotations")
-        .withIndex("by_sessionId_status", q => q.eq("sessionId", x.s._id))
+      const siblings = await ctx.db
+        .query("annotations")
+        .withIndex("by_sessionId_status", (q) => q.eq("sessionId", x.s._id))
         .collect();
       for (const sibling of siblings) {
-        if (sibling._id === annotationId || sibling.coachId !== x.s.coachId ||
-          sibling.remarkId !== x.r.remarkId || sibling.status === "deleted") continue;
+        if (
+          sibling._id === annotationId ||
+          sibling.coachId !== x.s.coachId ||
+          sibling.remarkId !== x.r.remarkId ||
+          sibling.status === "deleted"
+        )
+          continue;
         await ctx.db.patch(sibling._id, {
-          status: "needs_you", approvedAt: undefined,
+          status: "needs_you",
+          approvedAt: undefined,
           updatedAt: await changedAt(ctx, sibling),
         });
       }
     }
+    const updatedAt = await changedAt(ctx, x.a);
     await ctx.db.patch(annotationId, {
       ...fields,
       labelSpan: args.labelSpan,
@@ -289,8 +343,12 @@ export const edit = mutation({
       placedBy: next.placedBy,
       status: "needs_you",
       approvedAt: undefined,
-      updatedAt: await changedAt(ctx, x.a),
+      updatedAt,
     });
+    return {
+      updatedAt,
+      revision: (await projectPlayback(ctx, x.s._id)).revision,
+    };
   },
 });
 export const move = mutation({
@@ -304,7 +362,7 @@ export const move = mutation({
     const x = await item(ctx, args.annotationId);
     if (x.a.status === "deleted") throw Error("DELETED");
     const { annotationId, ...p } = args;
-    await valid(ctx, x, { ...x.a, ...p, placedBy: "coach" });
+    await valid(ctx, x, { ...x.a, ...p, placedBy: "coach" }, true);
     await ctx.db.patch(annotationId, {
       ...p,
       placedBy: "coach",
@@ -359,5 +417,154 @@ export const correctTurn = mutation({
       correctedText: args.correctedText,
       correctedAt: Date.now(),
     });
+  },
+});
+
+// No browser-supplied coverage or verdict enters either function. Only the
+// service HTTP action can call commitVerified after checking actual local bytes.
+async function verificationState(
+  ctx: QueryCtx,
+  annotationId: Id<"annotations">,
+  owner?: Id<"coaches">,
+) {
+  const x = await item(ctx, annotationId, owner);
+  if (x.a.status === "deleted") throw Error("DELETED");
+  await valid(ctx, x, x.a, true);
+  const config = await ctx.db
+    .query("pipeline_config")
+    .withIndex("by_version", (q) =>
+      q.eq("version", x.a.provenance.configVersion),
+    )
+    .unique();
+  if (!config) throw Error("INVALID_MARK");
+  const job = x.s.latestJobId ? await ctx.db.get(x.s.latestJobId) : null;
+  const trackRunId = x.a.provenance.stageRunIds.track;
+  const trackRun = trackRunId
+    ? await ctx.db.get(trackRunId as Id<"stageRuns">)
+    : null;
+  const trackJob = trackRun ? await ctx.db.get(trackRun.jobId) : null;
+  const tracks = (
+    await ctx.db
+      .query("tracks")
+      .withIndex("by_trackId", (q) => q.eq("trackId", x.a.trackId ?? ""))
+      .collect()
+  ).filter(
+    (t) =>
+      t.coachId === x.s.coachId &&
+      t.sessionId === x.s._id &&
+      t.remarkId === x.r.remarkId &&
+      t.role === x.s.subjectRole &&
+      t.fileRef === trackRun?.persistedTrackBinding?.fileRef,
+  );
+  if (x.r.mode !== "note_only" && tracks.length !== 1)
+    throw Error("TRACK_UNAVAILABLE");
+  const jobs = await ctx.db
+    .query("jobs")
+    .withIndex("by_sessionId", (q) => q.eq("sessionId", x.s._id))
+    .collect();
+  const sources = [];
+  for (const j of jobs) {
+    if (j.coachId !== x.s.coachId) continue;
+    const runs = await ctx.db
+      .query("stageRuns")
+      .withIndex("by_jobId_stage", (q) =>
+        q.eq("jobId", j._id).eq("stage", "transcode"),
+      )
+      .collect();
+    sources.push(
+      ...runs.filter(
+        (r) =>
+          r.coachId === x.s.coachId &&
+          r.sessionId === x.s._id &&
+          r.status === "done" &&
+          r.persistedOutputHash &&
+          r.outputRef,
+      ),
+    );
+  }
+  sources.sort(
+    (a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0) || a._id.localeCompare(b._id),
+  );
+  const source = sources[0] ?? null;
+  // Hash whole authoritative documents, including receipts, pinned config and
+  // source/subject/job binding. Only the digest and required inputs leave Convex.
+  const bytes = new TextEncoder().encode(
+    canonical({ ...x, config, job, trackRun, trackJob, tracks, source }),
+  );
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const state = Array.from(new Uint8Array(digest), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
+  return {
+    x,
+    state,
+    input: {
+      coachId: x.s.coachId,
+      sessionId: x.s._id,
+      updatedAt: x.a.updatedAt,
+      startMs: x.a.startMs,
+      endMs: x.a.endMs,
+      mode: x.r.mode,
+      keyframeMs: x.r.keyframeMs,
+      durationMs: x.s.durationMs,
+      trackRef: tracks[0]?.fileRef,
+      trackMode: tracks[0]?.mode,
+      artifact: source?.outputRef,
+      artifactHash: source?.persistedOutputHash,
+      minMarkCoverage: config.params.minMarkCoverage,
+    },
+  };
+}
+export const approvalInput = query({
+  args: {
+    annotationId: v.id("annotations"),
+    expectedUpdatedAt: v.number(),
+    expectedRevision: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const result = await verificationState(ctx, args.annotationId);
+    if (
+      result.x.a.updatedAt !== args.expectedUpdatedAt ||
+      (await projectPlayback(ctx, result.x.s._id)).revision !==
+        args.expectedRevision
+    )
+      throw Error("REVIEW_CONFLICT");
+    return { ...result.input, state: result.state };
+  },
+});
+export const commitVerified = internalMutation({
+  args: {
+    annotationId: v.id("annotations"),
+    coachId: v.id("coaches"),
+    state: v.string(),
+    expectedUpdatedAt: v.number(),
+    expiresAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    if (
+      !Number.isSafeInteger(args.expiresAt) ||
+      args.expiresAt <= Date.now() ||
+      args.expiresAt > Date.now() + 10000
+    )
+      throw Error("REVIEW_EXPIRED");
+    const result = await verificationState(
+      ctx,
+      args.annotationId,
+      args.coachId,
+    );
+    if (
+      result.state !== args.state ||
+      result.x.a.updatedAt !== args.expectedUpdatedAt
+    )
+      throw Error("REVIEW_CONFLICT");
+    // Exact retries on an already-approved revision are read-only. A retry of a
+    // consumed draft revision fails closed; a fresh read can safely retry it.
+    if (result.x.a.status === "approved") return { ok: true };
+    await ctx.db.patch(args.annotationId, {
+      status: "approved",
+      approvedAt: Date.now(),
+      updatedAt: await changedAt(ctx, result.x.a),
+    });
+    return { ok: true };
   },
 });

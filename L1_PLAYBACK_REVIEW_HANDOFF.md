@@ -53,13 +53,18 @@ UNTESTED. No `pnpm e2e` exists. Unit/integration harnesses are not browser E2E.
 Live Clerk/Convex setup, R2, browser/Pillow text rasterization/font/visual parity,
 mobile playback/audio behavior, and deployment resource behavior remain UNTESTED.
 
-T1.24 stays PARTIAL. A retime saves a real single-item draft but cannot inherit
-approval from its original checked range. Convex has summary coverage and a track
-reference, not validated frame observations; atomic local-byte/range verification
-must be connected before approving another range. The backend rejects that
-approval and the UI disables it. Reverting to the checked range or choosing note
-only is available. Existing checked-range anchor/type changes can be approved.
-There are numeric retiming controls, not drag/±0.5s controls. No bulk endpoint.
+T1.24's local retimed verification/approval gap is now connected (corrective
+increment from parent-reviewed `a99cf83259013337f69992bc118f36762df6fc25`).
+The actual Next route verifies authoritative local observations, then a private
+service-authenticated compare-and-commit transaction approves exactly one item.
+No original checker verdict or provenance is rewritten to authorize a new range.
+Move/inline editing has bounded drag, ±0.5-second and precise time controls plus
+an unmarked proxy with bounded seeking. Save and approve captures the editor's
+revision, receives the saved revision, verifies that exact revision and retains
+a retryable draft on failure. Original AI range and original saved coach-word
+label choice remain available. Full/default vs simple stays configurable.
+Live browser/device acceptance remains UNTESTED; T1.24 is not claimed fully
+accepted without that required coverage. No bulk endpoint exists.
 
 Suggestion approval/dismissal, free notes/focus/practice editing (screen21), sharing,
 student, finalize and typed/per-remark recovery execution are next lanes. Actual
@@ -127,3 +132,58 @@ Parent `pnpm check`: PASS — **495 JS / 395 runner / 62 orchestrator tests**.
 Production web build, contract checks, secret scan and diff check PASS; actual
 staged commit hook runs on the parent correction. Retimed-range verification and
 approval remains pending; browser E2E/live Clerk/Convex remains UNTESTED.
+
+## Retimed approval correction — implementation and evidence
+
+- `apps/web/lib/review/{handler,verify,client}.ts` and `/api/review/approve`:
+  authenticated ConvexHttpClient query; bounded actual local TrackFile bytes,
+  generated-schema/renderer semantics and canonical TranscodeOutput receipt;
+  checker half-open coverage/gaps/swaps and real still keyframe observation.
+  Note-only does not require track bytes. No client key, URL, owner, pass or
+  coverage is accepted. R2 remains unimplemented/UNTESTED.
+- `convex/review.ts` + private `/svc/review/approve`: digest and atomic compare
+  of complete annotation/remark/session/subject/latest-job/config and
+  source/track/run/job/receipt documents, service authentication and authoritative
+  coach owner. Public original-range approve guard remains intact. Whole-track
+  summary coverage does not substitute for actual per-range checking.
+- Expected editor and playback revisions reject stale confirmations before
+  verification, and the private digest rejects changes after verification.
+  Ten-second expiry rejects delayed commits. Consumed draft revisions reject;
+  fresh already-approved exact retries change no timestamps. A lost commit
+  response requires reading the actual current status before retry.
+- Actual Next + ConvexHttpClient + convex-test HTTP/private transaction + local
+  storage tests cover original/new ranges, gaps/low coverage/swaps/endpoints,
+  missing/malformed/oversized/symlink/foreign/non-subject bytes, source receipt,
+  still keyframe and note-only, owner/service auth/public claims, one-item status,
+  edit/delete/retap/mode/job/config/binding/source/receipt races and expiry/retry.
+- The TS checker consumes shared synthetic JSON cases and invokes the real Python
+  checker on those same cases to compare outcomes. Existing parent label-switch,
+  sibling-approval-reset and buffered original-audio regressions remain covered.
+- Real route composition with a controlled backend seam covers bounded time
+  controls, valid retime approval, invalid actual coverage remaining a retryable
+  draft, original-label restoration, stale editor conflict and login-scope abort.
+  This is not live browser E2E. No runtime fixture import or real-person media.
+
+Corrective final validation is recorded below after all commands complete.
+
+### Corrective validation
+
+- `pnpm check`: PASS — **529 JS tests / 48 files, 395 runner tests,
+  62 orchestrator tests**; lint, strict TS, Ruff/mypy, 34-contract drift,
+  six structural schema checks and offline Convex bindings.
+- `pnpm --filter @netsense/web build`: PASS — optimized production build includes
+  `/api/review/approve`, playback/review/move and coach media signing.
+- `pnpm contracts:gen`; `pnpm convex:codegen`: PASS via documented generators;
+  only the generated existing-HTTP contract manifest hash changed. No schema,
+  runner or storage implementation was changed.
+- `scripts/secret-scan.sh`: PASS — full history and nonignored working-source
+  scans with the repository's checksum-verified pinned gitleaks.
+- `git diff --check`, staged diff check, actual staged `git hook run pre-commit`
+  and the commit's installed hook: PASS.
+
+Residual acceptance: no `pnpm e2e` exists, and live Clerk/Convex, browser/device
+playback and review behavior remain UNTESTED. R2/deployed behavior, text/font
+rasterization parity, notes/focus/practice suggestion actions (T1.25), sharing,
+student/finalize and typed/per-remark recovery execution remain outside this
+correction. Local verification is not represented as live acceptance. No merge,
+watch, paid API call, deployment, main write, secret or real footage was used.

@@ -1323,13 +1323,60 @@ speech. Active jobs block mark
 changes. Missing/foreign/stale subject bindings and failed checks cannot approve
 tracked marks; note-only is a safe alternative.
 
-T1.24 is PARTIAL: retimed drafts cannot inherit a checker verdict for a different
-time range. Approval requires the original checked range (or note-only). An
-atomic bridge from validated local frame observations to a newly checked range
-is still required before retimed approval can ship. This lane does not invent a
-public assertion of track validity. Screen 20 has a real `/review/[annotationId]/move`
-route plus the same inline editor; numeric millisecond retiming replaces drag
-controls for this increment. `FEATURE_REVIEW_MODE=full` is the default; `simple`
-hides tabs and mark/label/anchor changes, retaining individual approve/delete and
-retiming. Notes/share/student/finalize and per-remark recovery execution remain
-separate lanes. No working-looking links or actions point to their missing routes.
+Retimed drafts never inherit the original checker verdict. The local authenticated
+`POST /api/review/approve` accepts exactly
+`{annotationId,expectedUpdatedAt,expectedRevision}` (32 KiB request cap). The
+revision is the playback projection's opaque revision string for the scope the
+coach saw; it includes subject, current job/config version, remark mode/moment,
+track/source binding, and annotation revisions. `review.edit` optionally accepts
+both expected fields for backwards compatibility and returns `{updatedAt,revision}`
+for the saved draft. The UI captures the editor's revision when opened, rather
+than silently adopting concurrent query changes; Save and approve verifies the
+returned saved revision. A failed verification leaves that saved draft retryable.
+
+The Next handler obtains a single owned `review.approvalInput` with the coach's
+Convex token. This returns only the required time/mode/keyframe inputs, pinned
+`minMarkCoverage`, current canonical track/source references, source receipt hash,
+authoritative coach owner, and a SHA-256 state digest, never full config/models or
+secrets. The handler reads actual TrackFile bytes through the same bounded,
+no-follow local regular-file reader and schema/semantic validator as coach media.
+It checks source TranscodeOutput against its canonical persistence receipt and
+measured dimensions/duration. Frame observations are subject-only, distinct,
+half-open, and excluded when declared in a gap; coverage uses the checker formula
+`min(observed,ceil(duration*fps/1000))/ceil(duration*fps/1000)` (one expected
+observation for fps zero). Swaps inside the range reject. Still mode additionally
+requires the actual selected keyframe observation; note-only reads no overlay
+track. Whole-track summary coverage cannot authorize or veto a verified new
+range. Role, integer bounds, moment limits, generated mark enums, pinned allowlist
+and verbatim label checks remain authoritative in Convex. Original aiPlacement,
+coach words and provenance are unchanged.
+
+Only after validation does Next call private `POST /svc/review/approve`, using
+`CONVEX_SERVICE_SECRET` and exactly
+`{annotationId,coachId,state,expectedUpdatedAt,expiresAt}`. Owner comes from the
+authenticated query, never a browser owner assertion. The internal transaction
+reconstructs and compares the digest of complete current annotation, remark,
+session/subject, latest job, track/run/job/receipt, source run/receipt, and pinned
+config documents. It reruns authoritative validation and checks the ten-second
+request expiry before approving exactly one annotation. Any edit, deletion,
+retap, mode/moment/job/config/reference/receipt change rejects without approval
+mutation; no public pass/coverage assertion can enter this route. A consumed draft
+revision fails closed on replay; a fresh exact already-approved revision is a
+read-only retry. Cancellation before commit leaves a draft; lost commit responses
+are resolved by rereading current status, never by applying an old proof to a new
+revision. The route uses a ten-second total deadline, four concurrency/auth slots,
+1 MiB Convex response and local JSON limits, no redirects/logging, fixed no-store
+errors and local immutable worker-artifact publication assumptions. R2 and live
+Clerk/Convex behavior remain UNTESTED.
+
+Screen 20 and the inline editor offer bounded start/end drag controls, ±0.5-second
+range shifts, precise numeric times and the actual unmarked proxy with bounded
+seeking. The original AI range remains separately labelled from the solid coach
+range. The saved original aiPlacement label span remains selectable after a
+neutral-label switch; immutable original words are copied and validated again.
+`FEATURE_REVIEW_MODE=full` remains the default; `simple` hides tabs, transcription,
+mode and mark/label/anchor changes, retaining individual approve/delete and
+retiming. T1.24's local verification/approval gap is connected; required live
+browser/device acceptance remains UNTESTED and no `pnpm e2e` exists yet.
+Notes/share/student/finalize and per-remark recovery execution remain separate
+lanes. No working-looking links or actions point to their missing routes.
