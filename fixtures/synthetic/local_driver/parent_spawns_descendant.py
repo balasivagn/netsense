@@ -3,7 +3,11 @@
 from pathlib import Path
 import subprocess
 import sys
+import time
 
-child = subprocess.Popen([sys.executable, Path(__file__).with_name("ignore_term_child.py")])
-Path(sys.argv[1]).write_text(str(child.pid), encoding="utf-8")
+subprocess.Popen(
+    [sys.executable, Path(__file__).with_name("ignore_term_child.py"), sys.argv[1]]
+)
+while not Path(sys.argv[1]).exists():
+    time.sleep(0.005)
 raise SystemExit(0)

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from contextlib import AbstractContextManager
 from datetime import datetime
-from typing import Protocol
+from typing import Protocol, TypeVar
 
 
 class LocalSandboxWaitTimeout(TimeoutError):
@@ -38,7 +38,10 @@ class SandboxHandle(Protocol):
     def terminate(self) -> None: ...
 
 
-class SandboxDriver(Protocol):
+SpecT = TypeVar("SpecT", contravariant=True)
+
+
+class SandboxDriver(Protocol[SpecT]):
     """Only context-managed acquisition is public so every sandbox is released."""
 
-    def acquire(self, spec: object) -> AbstractContextManager[SandboxHandle]: ...
+    def acquire(self, spec: SpecT) -> AbstractContextManager[SandboxHandle]: ...

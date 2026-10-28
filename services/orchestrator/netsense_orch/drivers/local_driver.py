@@ -8,10 +8,13 @@ UNTESTED and pending the T1.11 integration work.
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import signal
+import socket
 import subprocess
+import sys
 import threading
 import time
 from collections.abc import Iterator, Mapping
@@ -77,18 +80,75 @@ class LocalSandboxSpec:
         object.__setattr__(self, "timeout_s", _positive_finite(self.timeout_s, "timeout_s"))
 
 
-class _LocalSandboxHandle:
-    """One process-group sandbox, released by :meth:`LocalDriver.acquire`."""
+class LocalSandboxCleanupError(RuntimeError):
+    """Cleanup is unconfirmed; handle and name remain reserved for retry."""
 
-    def __init__(self, spec: LocalSandboxSpec, process: subprocess.Popen[bytes]) -> None:
+
+class _LocalSandboxHandle:
+    """Owns an unreaped supervisor until the last group signal is sent."""
+
+    def __init__(self, spec: LocalSandboxSpec) -> None:
         self._spec = spec
-        self._process = process
-        self._pgid = process.pid
         self._sandbox_id = str(uuid4())
         self._created_at = datetime.now(UTC)
         self._deadline = time.monotonic() + spec.timeout_s
         self._lock = threading.RLock()
         self._closed = False
+        self._signals_done = False
+        self._process: subprocess.Popen[bytes] | None = None
+        self._channel: socket.socket | None = None
+        self._buffer = b""
+        self._result: int | None = None
+        self._ready = False
+        self._startup_errno: int | None = None
+
+    def start(self) -> None:
+        channel, child_channel = socket.socketpair()
+        self._channel = channel
+        try:
+            self._process = subprocess.Popen(
+                (
+                    sys.executable,
+                    "-I",
+                    str(Path(__file__).with_name("_local_supervisor.py")),
+                    str(child_channel.fileno()),
+                ),
+                cwd=self._spec.cwd,
+                env={},
+                shell=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+                pass_fds=(child_channel.fileno(),),
+            )
+        finally:
+            child_channel.close()
+        # All potentially failing post-spawn setup is inside acquire's finally.
+        remaining = self._deadline - time.monotonic()
+        if remaining <= 0:
+            raise LocalSandboxTimeoutError("local sandbox startup lifetime elapsed")
+        channel.settimeout(remaining)
+        try:
+            channel.sendall(
+                json.dumps(
+                    {
+                        "command": self._spec.command,
+                        "env": dict(self._spec.env),
+                    }
+                ).encode()
+                + b"\n"
+            )
+        except TimeoutError:
+            raise LocalSandboxTimeoutError("local sandbox startup lifetime elapsed") from None
+        channel.setblocking(False)
+        while not self._ready:
+            self.poll()
+            if self._startup_errno is not None:
+                raise OSError(self._startup_errno, "local command startup failed")
+            if time.monotonic() >= self._deadline:
+                raise LocalSandboxTimeoutError("local sandbox startup lifetime elapsed")
+            time.sleep(0.005)
 
     @property
     def sandbox_id(self) -> str:
@@ -104,57 +164,86 @@ class _LocalSandboxHandle:
 
     def poll(self) -> int | None:
         with self._lock:
-            return self._process.poll()
+            if self._channel is not None and not self._closed:
+                while True:
+                    try:
+                        chunk = self._channel.recv(4096)
+                    except (BlockingIOError, ConnectionResetError):
+                        break
+                    if not chunk:
+                        break
+                    self._buffer += chunk
+                while b"\n" in self._buffer:
+                    line, self._buffer = self._buffer.split(b"\n", 1)
+                    if line == b"ready":
+                        self._ready = True
+                    elif line.startswith(b"exit "):
+                        self._result = int(line[5:])
+                    elif line.startswith(b"error "):
+                        self._startup_errno = int(line[6:])
+            return self._result
 
     def wait(self, timeout_s: float | None = None) -> int:
-        """Wait without allowing a caller timeout to extend the hard lifetime.
-
-        A shorter ``timeout_s`` raises :class:`LocalSandboxWaitTimeout` while the
-        context still owns the sandbox. Reaching the spec lifetime kills/reaps the
-        whole group and raises :class:`LocalSandboxTimeoutError`.
-        """
         caller_limit = None if timeout_s is None else _positive_finite(timeout_s, "timeout_s")
-        with self._lock:
-            result = self._process.poll()
+        caller_deadline = None if caller_limit is None else time.monotonic() + caller_limit
+        while True:
+            result = self.poll()
             if result is not None:
                 return result
-            remaining = self._deadline - time.monotonic()
-            if remaining <= 0:
+            now = time.monotonic()
+            if now >= self._deadline:
                 self.terminate()
                 raise LocalSandboxTimeoutError("local sandbox lifetime elapsed")
-            wait_for = remaining if caller_limit is None else min(caller_limit, remaining)
-            try:
-                return self._process.wait(timeout=wait_for)
-            except subprocess.TimeoutExpired as exc:
-                if time.monotonic() >= self._deadline:
-                    self.terminate()
-                    raise LocalSandboxTimeoutError("local sandbox lifetime elapsed") from None
-                raise LocalSandboxWaitTimeout("local sandbox wait elapsed") from exc
+            if caller_deadline is not None and now >= caller_deadline:
+                raise LocalSandboxWaitTimeout("local sandbox wait elapsed")
+            # No control lock is held while waiting; terminate can interrupt promptly.
+            remaining = self._deadline - now
+            if caller_deadline is not None:
+                remaining = min(remaining, caller_deadline - now)
+            time.sleep(min(0.005, remaining))
 
     def terminate(self) -> None:
-        """Idempotently terminate this process group and reap its direct parent."""
         with self._lock:
             if self._closed:
                 return
-            self._signal_group(signal.SIGTERM)
-            self._wait_parent(_TERMINATE_GRACE_S)
-            # The parent may have exited while descendants retained the group.
-            # SIGKILL is still sent to that original group before ownership ends.
-            self._signal_group(signal.SIGKILL)
-            self._wait_parent(_REAP_WAIT_S)
+            process = self._process
+            if process is not None:
+                if not self._signals_done:
+                    # Never poll/wait/reap the leader before the FINAL group signal.
+                    try:
+                        # Before READY the helper may not have installed its TERM
+                        # handler yet. Go straight to the final KILL in that case.
+                        if self._ready:
+                            self._signal_group(signal.SIGTERM)
+                            time.sleep(_TERMINATE_GRACE_S)
+                        self._signal_group(signal.SIGKILL)
+                        self._signals_done = True
+                    except OSError as exc:
+                        raise LocalSandboxCleanupError("local sandbox signal unconfirmed") from exc
+                try:
+                    process.wait(timeout=_REAP_WAIT_S)
+                except (subprocess.TimeoutExpired, OSError) as exc:
+                    raise LocalSandboxCleanupError("local sandbox reap unconfirmed") from exc
+                if self._channel is not None:
+                    self._channel.setblocking(False)
+                self.poll()
+                if self._result is None:
+                    self._result = -signal.SIGKILL
+            if self._channel is not None:
+                self._channel.close()
             self._closed = True
+            with LocalDriver._names_lock:
+                if LocalDriver._cleanup_pending.get(self.name) is self:
+                    LocalDriver._cleanup_pending.pop(self.name)
+                    LocalDriver._reserved_names.discard(self.name)
 
     def _signal_group(self, sig: signal.Signals) -> None:
+        assert self._process is not None
         try:
-            os.killpg(self._pgid, sig)
+            os.killpg(self._process.pid, sig)
         except ProcessLookupError:
-            # The group is already gone; no PID/PGID is used after ``_closed``.
-            return
-
-    def _wait_parent(self, timeout_s: float) -> None:
-        try:
-            self._process.wait(timeout=timeout_s)
-        except subprocess.TimeoutExpired:
+            # The unreaped leader still pins its PID. No unrelated group can
+            # acquire this identity before our final signal and subsequent reap.
             return
 
 
@@ -166,6 +255,7 @@ class LocalDriver:
     recovery require the production lifecycle plus sweeper and are still pending.
     """
 
+    _cleanup_pending: Final[dict[str, _LocalSandboxHandle]] = {}
     _names_lock: Final = threading.Lock()
     _reserved_names: Final[set[str]] = set()
 
@@ -174,21 +264,22 @@ class LocalDriver:
         self._reserve(spec.name)
         handle: _LocalSandboxHandle | None = None
         try:
-            process = subprocess.Popen(
-                spec.command,
-                cwd=spec.cwd,
-                env=dict(spec.env),
-                shell=False,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-            handle = _LocalSandboxHandle(spec, process)
+            handle = _LocalSandboxHandle(spec)
+            handle.start()
             yield handle
         finally:
             if handle is not None:
-                handle.terminate()
+                try:
+                    handle.terminate()
+                except BaseException:
+                    # Keep the Popen alive too: its destructor must not implicitly
+                    # reap the leader while a retry could still need to signal it.
+                    with handle._lock, self._names_lock:
+                        if handle._closed:
+                            self._reserved_names.discard(spec.name)
+                        else:
+                            self._cleanup_pending[spec.name] = handle
+                    raise
             self._release(spec.name)
 
     @classmethod
@@ -201,4 +292,5 @@ class LocalDriver:
     @classmethod
     def _release(cls, name: str) -> None:
         with cls._names_lock:
+            cls._cleanup_pending.pop(name, None)
             cls._reserved_names.discard(name)
