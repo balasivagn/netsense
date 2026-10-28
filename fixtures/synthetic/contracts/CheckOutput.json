@@ -1,0 +1,25 @@
+{
+  "valid": {
+    "remarkId": "synthetic",
+    "verdicts": [
+      {
+        "markId": "synthetic",
+        "pass": false,
+        "reason": "ok"
+      }
+    ],
+    "remarkStatus": "ok"
+  },
+  "invalid": {
+    "remarkId": "synthetic",
+    "verdicts": [
+      {
+        "markId": "synthetic",
+        "pass": false,
+        "reason": "ok"
+      }
+    ],
+    "remarkStatus": "ok",
+    "unexpected": true
+  }
+}

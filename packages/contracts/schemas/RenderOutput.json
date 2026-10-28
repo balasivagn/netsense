@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "RenderOutput.json",
+  "title": "RenderOutput",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "preview",
+        "final"
+      ]
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "video",
+        "stills"
+      ]
+    },
+    "fileRef": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stillRefs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "annotationId": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "annotationId",
+          "key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "segmentRefs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "segmentId": {
+            "type": "string"
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "segmentId",
+          "hash",
+          "key"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "durationMs": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "kind",
+    "mode",
+    "fileRef",
+    "stillRefs",
+    "segmentRefs",
+    "durationMs"
+  ],
+  "additionalProperties": false
+}

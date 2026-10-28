@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "PlanModelOutput.json",
+  "title": "PlanModelOutput",
+  "type": "object",
+  "properties": {
+    "coachSpeaker": {
+      "type": "string"
+    },
+    "remarks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "turnIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "aboutSubject": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no",
+              "unclear",
+              "general"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "feedback",
+              "instruction",
+              "praise",
+              "other"
+            ]
+          },
+          "aboutHint": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "turnIds",
+          "aboutSubject",
+          "kind",
+          "aboutHint"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "focusDrafts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          },
+          "remarkIndexes": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "required": [
+          "title",
+          "why",
+          "remarkIndexes"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 2
+    },
+    "practiceDrafts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          },
+          "remarkIndexes": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "required": [
+          "title",
+          "why",
+          "remarkIndexes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "noteDraft": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "why": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "why"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "coachSpeaker",
+    "remarks",
+    "focusDrafts",
+    "practiceDrafts",
+    "noteDraft"
+  ],
+  "additionalProperties": false
+}

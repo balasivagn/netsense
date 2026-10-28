@@ -1,0 +1,6 @@
+{
+  "valid": "batter",
+  "invalid": {
+    "unexpected": true
+  }
+}

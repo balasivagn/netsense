@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "NextFocusModelOutput.json",
+  "title": "NextFocusModelOutput",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "why": {
+      "type": "string"
+    },
+    "remarkIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "title",
+    "why",
+    "remarkIds"
+  ],
+  "additionalProperties": false
+}

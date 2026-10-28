@@ -1,0 +1,39 @@
+{
+  "valid": {
+    "proxyKey": "synthetic",
+    "audioWavKeys": [
+      {
+        "key": "synthetic",
+        "offsetMs": 0,
+        "durationMs": 0
+      }
+    ],
+    "audioM4aKey": "synthetic",
+    "durationMs": 0,
+    "width": 1,
+    "height": 1,
+    "fps": 1,
+    "frameCount": 0,
+    "keyframeIndexKey": "synthetic",
+    "sha256Verified": true
+  },
+  "invalid": {
+    "proxyKey": "synthetic",
+    "audioWavKeys": [
+      {
+        "key": "synthetic",
+        "offsetMs": 0,
+        "durationMs": 0
+      }
+    ],
+    "audioM4aKey": "synthetic",
+    "durationMs": 0,
+    "width": 1,
+    "height": 1,
+    "fps": 1,
+    "frameCount": 0,
+    "keyframeIndexKey": "synthetic",
+    "sha256Verified": true,
+    "unexpected": true
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "TrackFile.json",
+  "title": "TrackFile",
+  "type": "object",
+  "properties": {
+    "fps": {
+      "type": "number",
+      "minimum": 0
+    },
+    "subjectOnly": {
+      "const": true,
+      "type": "boolean"
+    },
+    "frames": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "box": {
+            "$ref": "Common.json#/$defs/Box"
+          },
+          "conf": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "ms",
+          "box",
+          "conf"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "swaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "jump",
+              "reassociated"
+            ]
+          }
+        },
+        "required": [
+          "ms",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "fps",
+    "subjectOnly",
+    "frames",
+    "gaps",
+    "swaps"
+  ],
+  "additionalProperties": false
+}

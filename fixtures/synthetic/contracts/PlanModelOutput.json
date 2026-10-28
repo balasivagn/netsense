@@ -1,0 +1,73 @@
+{
+  "valid": {
+    "coachSpeaker": "synthetic",
+    "remarks": [
+      {
+        "turnIds": [
+          "synthetic"
+        ],
+        "aboutSubject": "yes",
+        "kind": "feedback",
+        "aboutHint": "synthetic"
+      }
+    ],
+    "focusDrafts": [
+      {
+        "title": "synthetic",
+        "why": "synthetic",
+        "remarkIndexes": [
+          0
+        ]
+      }
+    ],
+    "practiceDrafts": [
+      {
+        "title": "synthetic",
+        "why": "synthetic",
+        "remarkIndexes": [
+          0
+        ]
+      }
+    ],
+    "noteDraft": {
+      "text": "synthetic",
+      "why": "synthetic"
+    }
+  },
+  "invalid": {
+    "coachSpeaker": "synthetic",
+    "remarks": [
+      {
+        "turnIds": [
+          "synthetic"
+        ],
+        "aboutSubject": "yes",
+        "kind": "feedback",
+        "aboutHint": "synthetic"
+      }
+    ],
+    "focusDrafts": [
+      {
+        "title": "synthetic",
+        "why": "synthetic",
+        "remarkIndexes": [
+          0
+        ]
+      }
+    ],
+    "practiceDrafts": [
+      {
+        "title": "synthetic",
+        "why": "synthetic",
+        "remarkIndexes": [
+          0
+        ]
+      }
+    ],
+    "noteDraft": {
+      "text": "synthetic",
+      "why": "synthetic"
+    },
+    "unexpected": true
+  }
+}

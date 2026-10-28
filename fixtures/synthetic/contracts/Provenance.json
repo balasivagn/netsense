@@ -1,0 +1,43 @@
+{
+  "valid": {
+    "configVersion": 1,
+    "stageRunIds": {
+      "moment": "synthetic",
+      "subject": "synthetic",
+      "track": "synthetic",
+      "place": "synthetic",
+      "check": "synthetic"
+    },
+    "workers": {
+      "moment": "synthetic",
+      "subject": "synthetic",
+      "track": "synthetic",
+      "place": "synthetic",
+      "check": "synthetic"
+    },
+    "modelVersions": {},
+    "placedBy": "ai",
+    "candidate": "synthetic"
+  },
+  "invalid": {
+    "configVersion": 1,
+    "stageRunIds": {
+      "moment": "synthetic",
+      "subject": "synthetic",
+      "track": "synthetic",
+      "place": "synthetic",
+      "check": "synthetic"
+    },
+    "workers": {
+      "moment": "synthetic",
+      "subject": "synthetic",
+      "track": "synthetic",
+      "place": "synthetic",
+      "check": "synthetic"
+    },
+    "modelVersions": {},
+    "placedBy": "ai",
+    "candidate": "synthetic",
+    "unexpected": true
+  }
+}

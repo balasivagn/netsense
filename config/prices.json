@@ -1,0 +1,9 @@
+{
+  "status": "UNTESTED; verify at T0.4",
+  "sparkInputUsdPerMillionTokens": 1.25,
+  "sparkOutputUsdPerMillionTokens": 4.25,
+  "samUsdPerThousandFrames": 0.2,
+  "samMinFramesPerRequest": 50,
+  "transcribeUsdPerAudioHour": 0.18,
+  "sandboxUsdPerSecond": null
+}

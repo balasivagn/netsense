@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "PlaceInput.json",
+  "title": "PlaceInput",
+  "type": "object",
+  "properties": {
+    "remarkId": {
+      "type": "string"
+    },
+    "coachWords": {
+      "type": "string"
+    },
+    "turnSpans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "turnId": {
+            "type": "string"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "turnId",
+          "length"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "role": {
+      "$ref": "Common.json#/$defs/SubjectRole"
+    },
+    "momentStartMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "momentEndMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "keyframeMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "boxAtKeyframe": {
+      "$ref": "Common.json#/$defs/Box"
+    },
+    "coverage": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "allowedMarkTypes": {
+      "type": "array",
+      "items": {
+        "$ref": "Common.json#/$defs/MarkType"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "remarkNumber": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "required": [
+    "remarkId",
+    "coachWords",
+    "turnSpans",
+    "role",
+    "momentStartMs",
+    "momentEndMs",
+    "keyframeMs",
+    "boxAtKeyframe",
+    "coverage",
+    "allowedMarkTypes",
+    "remarkNumber"
+  ],
+  "additionalProperties": false
+}

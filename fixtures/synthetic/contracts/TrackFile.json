@@ -1,0 +1,59 @@
+{
+  "valid": {
+    "fps": 0,
+    "subjectOnly": true,
+    "frames": [
+      {
+        "ms": 0,
+        "box": {
+          "x1": 0,
+          "y1": 0,
+          "x2": 0,
+          "y2": 0
+        },
+        "conf": 0
+      }
+    ],
+    "gaps": [
+      [
+        0,
+        0
+      ]
+    ],
+    "swaps": [
+      {
+        "ms": 0,
+        "reason": "jump"
+      }
+    ]
+  },
+  "invalid": {
+    "fps": 0,
+    "subjectOnly": true,
+    "frames": [
+      {
+        "ms": 0,
+        "box": {
+          "x1": 0,
+          "y1": 0,
+          "x2": 0,
+          "y2": 0
+        },
+        "conf": 0
+      }
+    ],
+    "gaps": [
+      [
+        0,
+        0
+      ]
+    ],
+    "swaps": [
+      {
+        "ms": 0,
+        "reason": "jump"
+      }
+    ],
+    "unexpected": true
+  }
+}

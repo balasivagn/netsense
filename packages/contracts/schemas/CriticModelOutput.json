@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "CriticModelOutput.json",
+  "title": "CriticModelOutput",
+  "type": "object",
+  "properties": {
+    "pass": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "pass",
+    "reason"
+  ],
+  "additionalProperties": false
+}

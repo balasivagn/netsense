@@ -1,0 +1,23 @@
+{
+  "valid": {
+    "frameMs": 0,
+    "point": {
+      "x": 0,
+      "y": 0
+    },
+    "role": "batter",
+    "selectedBy": "coach",
+    "selectedAt": 0
+  },
+  "invalid": {
+    "frameMs": 0,
+    "point": {
+      "x": 0,
+      "y": 0
+    },
+    "role": "batter",
+    "selectedBy": "coach",
+    "selectedAt": 0,
+    "unexpected": true
+  }
+}

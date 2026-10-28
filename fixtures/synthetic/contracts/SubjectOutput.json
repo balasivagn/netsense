@@ -1,0 +1,45 @@
+{
+  "valid": {
+    "remarkId": "synthetic",
+    "target": {
+      "role": "batter",
+      "promptBox": {
+        "x1": 0,
+        "y1": 0,
+        "x2": 0,
+        "y2": 0
+      },
+      "promptPoint": {
+        "x": 0,
+        "y": 0
+      },
+      "frameMs": 0
+    },
+    "method": "anchor_reuse",
+    "why": "synthetic",
+    "confidence": "high",
+    "candidatesCount": 0
+  },
+  "invalid": {
+    "remarkId": "synthetic",
+    "target": {
+      "role": "batter",
+      "promptBox": {
+        "x1": 0,
+        "y1": 0,
+        "x2": 0,
+        "y2": 0
+      },
+      "promptPoint": {
+        "x": 0,
+        "y": 0
+      },
+      "frameMs": 0
+    },
+    "method": "anchor_reuse",
+    "why": "synthetic",
+    "confidence": "high",
+    "candidatesCount": 0,
+    "unexpected": true
+  }
+}

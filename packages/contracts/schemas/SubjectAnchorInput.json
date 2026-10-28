@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "SubjectAnchorInput.json",
+  "title": "SubjectAnchorInput",
+  "type": "object",
+  "properties": {
+    "proxyKey": {
+      "type": "string"
+    },
+    "subject": {
+      "$ref": "Common.json#/$defs/Subject"
+    }
+  },
+  "required": [
+    "proxyKey",
+    "subject"
+  ],
+  "additionalProperties": false
+}

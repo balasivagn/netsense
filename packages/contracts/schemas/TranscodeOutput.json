@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "TranscodeOutput.json",
+  "title": "TranscodeOutput",
+  "type": "object",
+  "properties": {
+    "proxyKey": {
+      "type": "string"
+    },
+    "audioWavKeys": {
+      "type": "array",
+      "items": {
+        "$ref": "Common.json#/$defs/AudioChunk"
+      }
+    },
+    "audioM4aKey": {
+      "type": "string"
+    },
+    "durationMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "fps": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "frameCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "keyframeIndexKey": {
+      "type": "string"
+    },
+    "sha256Verified": {
+      "const": true,
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "proxyKey",
+    "audioWavKeys",
+    "audioM4aKey",
+    "durationMs",
+    "width",
+    "height",
+    "fps",
+    "frameCount",
+    "keyframeIndexKey",
+    "sha256Verified"
+  ],
+  "additionalProperties": false
+}

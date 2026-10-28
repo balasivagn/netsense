@@ -1,0 +1,29 @@
+{
+  "valid": {
+    "remarkId": "synthetic",
+    "trackId": "synthetic",
+    "role": "batter",
+    "mode": "video",
+    "fileRef": "synthetic",
+    "maskRef": "synthetic",
+    "coverage": 0,
+    "framesBilled": 0,
+    "cacheHit": false,
+    "swapSuspected": false,
+    "reassociations": 0
+  },
+  "invalid": {
+    "remarkId": "synthetic",
+    "trackId": "synthetic",
+    "role": "batter",
+    "mode": "video",
+    "fileRef": "synthetic",
+    "maskRef": "synthetic",
+    "coverage": 0,
+    "framesBilled": 0,
+    "cacheHit": false,
+    "swapSuspected": false,
+    "reassociations": 0,
+    "unexpected": true
+  }
+}

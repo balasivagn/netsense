@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "StageRun.json",
+  "title": "StageRun",
+  "type": "object",
+  "properties": {
+    "jobId": {
+      "type": "string"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "stage": {
+      "$ref": "Common.json#/$defs/StageKey"
+    },
+    "remarkId": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "workerId": {
+      "type": "string"
+    },
+    "workerType": {
+      "$ref": "Common.json#/$defs/WorkerType"
+    },
+    "provider": {
+      "$ref": "Common.json#/$defs/Provider"
+    },
+    "modelVersion": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "promptHash": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "candidate": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "done",
+        "failed",
+        "skipped",
+        "fallback",
+        "needs_coach"
+      ]
+    },
+    "errorCode": {
+      "anyOf": [
+        {
+          "$ref": "ErrorCode.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "errorDetail": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 500
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "inputHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "outputRef": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "startedAt": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "endedAt": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "latencyMs": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "samFrames": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "inputTokens": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "outputTokens": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "costUsd": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "jobId",
+    "sessionId",
+    "stage",
+    "remarkId",
+    "workerId",
+    "workerType",
+    "provider",
+    "modelVersion",
+    "promptHash",
+    "candidate",
+    "attempt",
+    "idempotencyKey",
+    "status",
+    "errorCode",
+    "errorDetail",
+    "inputHash",
+    "outputRef",
+    "startedAt",
+    "endedAt",
+    "latencyMs",
+    "samFrames",
+    "inputTokens",
+    "outputTokens",
+    "costUsd"
+  ],
+  "additionalProperties": false
+}

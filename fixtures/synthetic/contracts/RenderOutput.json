@@ -1,0 +1,41 @@
+{
+  "valid": {
+    "kind": "preview",
+    "mode": "video",
+    "fileRef": "synthetic",
+    "stillRefs": [
+      {
+        "annotationId": "synthetic",
+        "key": "synthetic"
+      }
+    ],
+    "segmentRefs": [
+      {
+        "segmentId": "synthetic",
+        "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+        "key": "synthetic"
+      }
+    ],
+    "durationMs": 0
+  },
+  "invalid": {
+    "kind": "preview",
+    "mode": "video",
+    "fileRef": "synthetic",
+    "stillRefs": [
+      {
+        "annotationId": "synthetic",
+        "key": "synthetic"
+      }
+    ],
+    "segmentRefs": [
+      {
+        "segmentId": "synthetic",
+        "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+        "key": "synthetic"
+      }
+    ],
+    "durationMs": 0,
+    "unexpected": true
+  }
+}

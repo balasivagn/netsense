@@ -86,18 +86,21 @@ Honest notes: no paid keys are needed for any row. Convex and Clerk free dev acc
 ## M1a · Skeleton: contracts, data, auth, upload, runner with fake workers
 
 ### T1.01 Repo scaffold and tooling
+- Foundation candidate implemented on `lane/l0-contracts-foundation`; parent review and Bala merge pending. Local acceptance: `pnpm install`, `pnpm check`, production shell build and real secret hooks pass. Python package suites: runner 95, orchestrator 1. See `FOUNDATION_HANDOFF.md`.
 - Depends on: none
 - Files: `package.json`, `pnpm-workspace.yaml`, `apps/web/*` (Next.js App Router, TS strict, Tailwind), `runner/pyproject.toml`, `services/orchestrator/pyproject.toml`, `.gitignore`, `.editorconfig`, `.github/workflows/ci.yml`, `.pre-commit-config.yaml` (gitleaks), `scripts/check-env.ts`
 - Accept: `pnpm install && pnpm check` (lint, typecheck, unit) passes; `uv run pytest` passes in both Python packages; gitleaks pre-commit installed; `.gitignore` covers `.env*` (except `.env.example`), `spike/clips`, `spike/out`, `local-fixtures/`, `demo-bundles/`, `*.mp4`, `*.mov`, `*.wav`.
 - Test: CI workflow runs locally via `pnpm check`.
 
 ### T1.02 Contracts package
+- Foundation candidate implemented: 34 schemas/generated TS+Pydantic, 6 Spark-limit schemas, manifest/digests, shared valid/invalid fixtures and UTF-16 tests. `pnpm test:contracts`: 76 JS + 94 Python tests pass; generated-file drift negative test rejects tampering and passes after restoration. Live structured-output acceptance remains UNTESTED.
 - Depends on: T1.01
 - Files: `packages/contracts/schemas/*.json` (Common incl. `Subject`/`SubjectRole`, ErrorCode, Transcode*, Transcribe*, Plan*, Moment*, SubjectAnchor*, Subject*, Track*, Place*, Check*, Render*, PipelineConfig, StageRun, Provenance), `packages/contracts/gen/` (TS), `runner/netsense_runner/contracts/` (Pydantic, generated), `scripts/gen-contracts.sh`, `fixtures/synthetic/contracts/*.json`
 - Accept: every schema in SPEC §7 and §8 exists; agent model-output schemas pass a Muse Spark limits linter (no recursion, depth ≤ 10, no allOf/oneOf, root not anyOf, `additionalProperties:false`, all keys required); `pnpm contracts:check` fails on drift.
 - Test: `pnpm test:contracts`; `uv run pytest runner/tests/test_contracts.py`.
 
 ### T1.03 Convex schema, config seed, core functions
+- Foundation candidate implemented: all 18 M1 tables, internal seed/claim/enqueue/completion/stageRuns, authenticated ownership functions and subject-retrack behavior. Local `convex-test` verifies ownership, concurrent claim, both gating orders/racing retries, config pinning and rollup (included in 98 passing JS tests). Convex deployment and IC1 merge are pending/UNTESTED; no real Clerk login or paid stage is claimed.
 - Depends on: T1.02
 - Files: `convex/schema.ts`, `convex/config.ts`, `convex/sessions.ts`, `convex/students.ts`, `convex/jobs.ts`, `convex/stageRuns.ts`, `convex/lib/auth.ts`, `config/pipeline_config.v1.json`, `config/prices.json`
 - Accept: schema matches SPEC §9 (v1.1: `studentId`, `subjectRole`, `subject`, `subjectStatus`; job kind `subject_retrack`); `jobs.enqueueWhenReady` enqueues the pipeline exactly once when both upload complete and subject set (either order); `config.seed` inserts v1 once; `jobs.claim` is atomic (two concurrent claims never both win); `stageRuns.finish` rolls up `coachStage/progress`.

@@ -1,0 +1,53 @@
+{
+  "valid": {
+    "remarkId": "synthetic",
+    "coachWords": "synthetic",
+    "turnSpans": [
+      {
+        "turnId": "synthetic",
+        "length": 0
+      }
+    ],
+    "role": "batter",
+    "momentStartMs": 0,
+    "momentEndMs": 0,
+    "keyframeMs": 0,
+    "boxAtKeyframe": {
+      "x1": 0,
+      "y1": 0,
+      "x2": 0,
+      "y2": 0
+    },
+    "coverage": 0,
+    "allowedMarkTypes": [
+      "circle"
+    ],
+    "remarkNumber": 1
+  },
+  "invalid": {
+    "remarkId": "synthetic",
+    "coachWords": "synthetic",
+    "turnSpans": [
+      {
+        "turnId": "synthetic",
+        "length": 0
+      }
+    ],
+    "role": "batter",
+    "momentStartMs": 0,
+    "momentEndMs": 0,
+    "keyframeMs": 0,
+    "boxAtKeyframe": {
+      "x1": 0,
+      "y1": 0,
+      "x2": 0,
+      "y2": 0
+    },
+    "coverage": 0,
+    "allowedMarkTypes": [
+      "circle"
+    ],
+    "remarkNumber": 1,
+    "unexpected": true
+  }
+}

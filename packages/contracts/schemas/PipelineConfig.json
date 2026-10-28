@@ -1,0 +1,327 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "PipelineConfig.json",
+  "title": "PipelineConfig",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "note": {
+      "type": "string"
+    },
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "stage": {
+            "$ref": "Common.json#/$defs/StageKey"
+          },
+          "coachLabel": {
+            "type": "string"
+          },
+          "workerId": {
+            "type": "string"
+          },
+          "workerType": {
+            "$ref": "Common.json#/$defs/WorkerType"
+          },
+          "provider": {
+            "$ref": "Common.json#/$defs/Provider"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fanOut": {
+            "type": "string",
+            "enum": [
+              "none",
+              "per_remark"
+            ]
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "retry": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fallbackWorker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "critic": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "workerId": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "$ref": "Common.json#/$defs/Provider"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "workerId",
+                  "provider",
+                  "model",
+                  "enabled"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "stage",
+          "coachLabel",
+          "workerId",
+          "workerType",
+          "provider",
+          "model",
+          "fanOut",
+          "timeoutMs",
+          "retry",
+          "fallbackWorker",
+          "candidates",
+          "enabled",
+          "critic"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 9,
+      "maxItems": 9
+    },
+    "coachStages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "params": {
+      "type": "object",
+      "properties": {
+        "personConcept": {
+          "type": "string"
+        },
+        "minPersonConfidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "maxMomentMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "momentLookbackMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "keyframeFps": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "trackPadMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "downsampleFps": {
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minMarkCoverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "stillsThreshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "allowedMarkTypes": {
+          "type": "array",
+          "items": {
+            "$ref": "Common.json#/$defs/MarkType"
+          }
+        },
+        "maxMarksPerRemark": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "labelMaxChars": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "renderModeDefault": {
+          "type": "string",
+          "enum": [
+            "video",
+            "stills"
+          ]
+        },
+        "otherPersonRemarksInShare": {
+          "type": "boolean"
+        },
+        "anchorReuseMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reassocIouMin": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "swapIouMin": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "swapJumpFrac": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "maxSubjectCandidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "subjectModel": {
+          "type": "string"
+        },
+        "segmentationModel": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "personConcept",
+        "minPersonConfidence",
+        "maxMomentMs",
+        "momentLookbackMs",
+        "keyframeFps",
+        "trackPadMs",
+        "downsampleFps",
+        "minMarkCoverage",
+        "stillsThreshold",
+        "allowedMarkTypes",
+        "maxMarksPerRemark",
+        "labelMaxChars",
+        "renderModeDefault",
+        "otherPersonRemarksInShare",
+        "anchorReuseMs",
+        "reassocIouMin",
+        "swapIouMin",
+        "swapJumpFrac",
+        "maxSubjectCandidates",
+        "subjectModel",
+        "segmentationModel"
+      ],
+      "additionalProperties": false
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "jobSamFrameCap": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "jobSparkTokenCap": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "fanoutConcurrency": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "dailySpendLimitUsd": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "sandboxTimeoutCapS": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "sandboxIdleTimeoutS": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "jobMaxAttempts": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "maxVideoMinutes": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "jobLeaseS": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "jobSamFrameCap",
+        "jobSparkTokenCap",
+        "fanoutConcurrency",
+        "dailySpendLimitUsd",
+        "sandboxTimeoutCapS",
+        "sandboxIdleTimeoutS",
+        "jobMaxAttempts",
+        "maxVideoMinutes",
+        "jobLeaseS"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version",
+    "note",
+    "stages",
+    "coachStages",
+    "params",
+    "limits"
+  ],
+  "additionalProperties": false
+}

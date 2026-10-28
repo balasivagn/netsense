@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "CheckInput.json",
+  "title": "CheckInput",
+  "type": "object",
+  "properties": {
+    "remarkId": {
+      "type": "string"
+    },
+    "marks": {
+      "type": "array",
+      "items": {
+        "$ref": "Common.json#/$defs/Mark"
+      }
+    },
+    "trackFileRef": {
+      "type": "string"
+    },
+    "transcriptTurns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "turnId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "turnId",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "momentStartMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "momentEndMs": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "remarkId",
+    "marks",
+    "trackFileRef",
+    "transcriptTurns",
+    "momentStartMs",
+    "momentEndMs"
+  ],
+  "additionalProperties": false
+}

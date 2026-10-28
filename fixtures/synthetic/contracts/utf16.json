@@ -1,0 +1,5 @@
+{
+ "text":"Synthetic 🏏 remark",
+ "valid":[{"start":10,"end":12,"expected":"🏏"},{"start":13,"end":19,"expected":"remark"},{"start":0,"end":9,"expected":"Synthetic"}],
+ "invalid":[{"start":10,"end":11},{"start":11,"end":12},{"start":-1,"end":2},{"start":0,"end":20},{"start":2,"end":1},{"start":1,"end":1},{"start":0.5,"end":2}]
+}

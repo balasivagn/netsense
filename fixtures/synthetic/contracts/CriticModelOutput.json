@@ -1,0 +1,11 @@
+{
+  "valid": {
+    "pass": false,
+    "reason": "synthetic"
+  },
+  "invalid": {
+    "pass": false,
+    "reason": "synthetic",
+    "unexpected": true
+  }
+}

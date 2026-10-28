@@ -1,0 +1,5 @@
+{
+  "name": "@netsense/contracts",
+  "private": true,
+  "types": "gen/index.ts"
+}

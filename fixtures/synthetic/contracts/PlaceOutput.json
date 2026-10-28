@@ -1,0 +1,45 @@
+{
+  "valid": {
+    "remarkId": "synthetic",
+    "marks": [
+      {
+        "markId": "synthetic",
+        "markType": "circle",
+        "anchor": "box_center",
+        "arrowFrom": "left",
+        "startMs": 0,
+        "endMs": 0,
+        "labelSpan": {
+          "turnId": "synthetic",
+          "start": 0,
+          "end": 1
+        },
+        "labelText": "synthetic",
+        "neutralLabel": "Batter"
+      }
+    ],
+    "why": "synthetic"
+  },
+  "invalid": {
+    "remarkId": "synthetic",
+    "marks": [
+      {
+        "markId": "synthetic",
+        "markType": "circle",
+        "anchor": "box_center",
+        "arrowFrom": "left",
+        "startMs": 0,
+        "endMs": 0,
+        "labelSpan": {
+          "turnId": "synthetic",
+          "start": 0,
+          "end": 1
+        },
+        "labelText": "synthetic",
+        "neutralLabel": "Batter"
+      }
+    ],
+    "why": "synthetic",
+    "unexpected": true
+  }
+}

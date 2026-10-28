@@ -1,0 +1,42 @@
+{
+  "name": "netsense",
+  "private": true,
+  "packageManager": "pnpm@12.15.0",
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter @netsense/web dev\" \"convex dev\"",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit && pnpm --filter @netsense/web typecheck",
+    "test": "vitest run",
+    "test:contracts": "vitest run packages/contracts && uv run --project runner pytest runner/tests/test_contracts.py",
+    "contracts:gen": "bash scripts/gen-contracts.sh",
+    "contracts:check": "bash scripts/gen-contracts.sh --check",
+    "check:env": "tsx scripts/check-env.ts",
+    "check:python": "uv run --project runner ruff check runner services && uv run --project runner mypy --strict runner && uv run --project services/orchestrator mypy --strict services/orchestrator && uv run --project runner pytest runner/tests && uv run --project services/orchestrator pytest services/orchestrator/tests",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm check:python && pnpm contracts:check && pnpm contracts:lint && pnpm convex:check",
+    "prepare": "uv tool run --from pre-commit==4.7.0 pre-commit install",
+    "convex:codegen": "node scripts/convex-codegen.mjs",
+    "convex:check": "node scripts/convex-codegen.mjs --check",
+    "contracts:lint": "tsx scripts/lint-model-schemas.ts",
+    "contracts:test-drift": "tsx scripts/test-contract-drift.ts"
+  },
+  "dependencies": {
+    "convex": "1.48.0"
+  },
+  "devDependencies": {
+    "@edge-runtime/vm": "5.0.0",
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.6.5",
+    "ajv": "8.20.0",
+    "concurrently": "10.0.6",
+    "convex-test": "0.0.65",
+    "eslint": "10.13.0",
+    "json-schema-to-typescript": "16.0.0",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  },
+  "type": "module"
+}
