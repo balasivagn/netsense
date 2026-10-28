@@ -14,7 +14,7 @@ All persistence inputs are generated Pydantic outputs and are revalidated agains
 
 ## Transport and failures
 
-Each call uses independent standard-library transport, so heartbeats can run while another request is in flight. There are no retries or arbitrary route/URL overrides. Redirects are rejected. A monotonic deadline covers connect and streamed response reads; the response cap is 32,768 bytes (or the lower supplied limit). Failures are fixed codes only: `INVALID_ORIGIN`, `INVALID_TIMEOUT`, `CONTRACT_INVALID`, `HTTP_STATUS`, `TRANSPORT_FAILED`, `TIMEOUT`, `RESPONSE_TOO_LARGE`, `INVALID_RESPONSE`, and `REDIRECT_REJECTED`.
+Each call uses independent standard-library transport, so heartbeats can run while another request is in flight. There are no retries or arbitrary route/URL overrides. Redirects are rejected. REVIEW BLOCKER: the current buffered response read can exceed its advertised monotonic deadline; DNS/header waits also need bounded cancellation. The current 32,768-byte ceiling is too small for larger legitimate worker projections. Transport repair is pending; this client is not ready for DAG integration. Failures are fixed codes only: `INVALID_ORIGIN`, `INVALID_TIMEOUT`, `CONTRACT_INVALID`, `HTTP_STATUS`, `TRANSPORT_FAILED`, `TIMEOUT`, `RESPONSE_TOO_LARGE`, `INVALID_RESPONSE`, and `REDIRECT_REJECTED`.
 
 ## DAG integration shape
 
@@ -25,3 +25,5 @@ The future DAG adapter creates the client from its supplied runtime origin and j
 ## Verification
 
 `cd runner && uv run pytest tests/test_worker_http.py` — 12 passed. Tests use ephemeral local ports/tokens and synthetic fixtures only; they cover the full registered endpoint set, projection/response mapping, omission semantics, pre-network contract rejection, status/malformed failures, limits, slow streamed timeout, redirect rejection, and independent heartbeat concurrency.
+
+Parent wire review fixes: upload metadata is flat under `inputs`, matching actual Convex; subjectRole is required/non-null; anchor boxes are closed typed objects; lifecycle bodies and provenance validate before network; finite JSON values and boolean success responses are enforced. The added Convex-to-Python test validates actual HTTP job responses before and after all core persistence prerequisites. `pnpm check`: PASS — 262 JS, 139 runner, 1 orchestrator tests; focused HTTP Python suite 15 tests. Secret scan, diff check and real commit hook pass. PR stays draft pending transport deadline/error/limit repair; no full E2E or live API claim.

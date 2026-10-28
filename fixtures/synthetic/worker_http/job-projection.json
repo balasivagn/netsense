@@ -1,5 +1,34 @@
 {
-  "job": {"id":"synthetic-job","sessionId":"synthetic-session","kind":"pipeline","configVersion":1,"attempt":1,"maxAttempts":3,"status":"running","leaseOwner":"synthetic-owner","leaseUntil":1,"heartbeatAt":1,"stage":null,"remarkId":null},
-  "session": {"subject":null,"subjectAnchor":null,"renderMode":"video","durationMs":null,"studentLabel":"synthetic student","subjectRole":null},
-  "inputs": {"upload":{"uploadId":"synthetic-upload","sourceKey":"sessions/synthetic-session/source","declaredBytes":0,"declaredSha256":"0000000000000000000000000000000000000000000000000000000000000000","mimeType":"video/mp4"},"transcriptTurns":[],"remarks":[],"completedStageRuns":[]}
+  "job": {
+    "id": "synthetic-job",
+    "sessionId": "synthetic-session",
+    "kind": "pipeline",
+    "configVersion": 1,
+    "attempt": 1,
+    "maxAttempts": 3,
+    "status": "running",
+    "leaseOwner": "synthetic-owner",
+    "leaseUntil": 1,
+    "heartbeatAt": 1,
+    "stage": null,
+    "remarkId": null
+  },
+  "session": {
+    "subject": null,
+    "subjectAnchor": null,
+    "renderMode": "video",
+    "durationMs": null,
+    "studentLabel": "synthetic student",
+    "subjectRole": "batter"
+  },
+  "inputs": {
+    "transcriptTurns": [],
+    "remarks": [],
+    "completedStageRuns": [],
+    "uploadId": "synthetic-upload",
+    "sourceKey": "sessions/synthetic-session/source",
+    "declaredBytes": 1,
+    "declaredSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "mimeType": "video/mp4"
+  }
 }

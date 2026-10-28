@@ -33,7 +33,16 @@ from netsense_runner.contracts.TranscodeOutput import TranscodeOutput
 from netsense_runner.contracts.TranscribeOutput import TranscribeOutput
 from netsense_runner.json_types import JsonValue
 
-from .worker_wire import MarksResponse, OkResponse, StageKey, StartStageResponse, WorkerJobResponse
+from .worker_wire import (
+    DoneRequest,
+    FinishStageRequest,
+    MarksResponse,
+    OkResponse,
+    StageKey,
+    StartStageRequest,
+    StartStageResponse,
+    WorkerJobResponse,
+)
 
 _MAX_RESPONSE_BYTES = 32_768
 _PERSIST_RESPONSE_BYTES = 32_768
@@ -108,6 +117,14 @@ class ConvexWorkerClient:
         response = self._request("GET", "/worker/job", None, WorkerJobResponse)
         if response.config.version != response.job.configVersion:
             raise WorkerClientError("INVALID_RESPONSE")
+        try:
+            self._validate_contract("PipelineConfig", self._model_json(response.config))
+            if response.session.subject is not None:
+                self._validate_contract("Subject", self._model_json(response.session.subject))
+                if response.session.subject.role != response.session.subjectRole:
+                    raise ValueError("INVALID_RESPONSE")
+        except (WorkerClientError, ValueError):
+            raise WorkerClientError("INVALID_RESPONSE") from None
         return response
 
     def heartbeat(self) -> None:
@@ -135,6 +152,7 @@ class ConvexWorkerClient:
         self._optional(payload, "remarkId", remark_id)
         self._optional(payload, "promptHash", prompt_hash)
         self._optional(payload, "candidate", candidate)
+        self._validate_request(StartStageRequest, payload)
         response = self._request("POST", "/worker/stageRuns/start", payload, StartStageResponse)
         return response.stageRunId
 
@@ -160,11 +178,13 @@ class ConvexWorkerClient:
         }
         self._optional(payload, "outputRef", output_ref)
         self._optional(payload, "errorCode", error_code)
+        self._validate_request(FinishStageRequest, payload)
         self._ok("/worker/stageRuns/finish", payload)
 
     def done(self, *, status: JobDoneStatus, error_code: str | None = None) -> None:
         payload: dict[str, JsonValue] = {"status": status}
         self._optional(payload, "errorCode", error_code)
+        self._validate_request(DoneRequest, payload)
         self._ok("/worker/done", payload)
 
     def persist_transcode(self, stage_run_id: str, output: TranscodeOutput) -> None:
@@ -196,6 +216,7 @@ class ConvexWorkerClient:
         self, stage_run_id: str, output: PlaceOutput, *, provenance: Provenance
     ) -> dict[str, str]:
         provenance_value = self._model_json(provenance)
+        self._validate_contract("Provenance", provenance_value)
         payload = self._payload(
             stage_run_id,
             output,
@@ -209,7 +230,7 @@ class ConvexWorkerClient:
                 raise WorkerClientError("INVALID_RESPONSE")
             mapping[item.markId] = item.annotationId
         expected = {mark.markId for mark in output.marks}
-        if set(mapping) != expected:
+        if set(mapping) != expected or len(set(mapping.values())) != len(mapping):
             raise WorkerClientError("INVALID_RESPONSE")
         return mapping
 
@@ -236,6 +257,8 @@ class ConvexWorkerClient:
         contract: str,
         extra: dict[str, JsonValue] | None = None,
     ) -> dict[str, JsonValue]:
+        if not isinstance(stage_run_id, str) or not 0 < len(stage_run_id) <= 1024:
+            raise WorkerClientError("CONTRACT_INVALID")
         value = self._model_json(output)
         self._validate_contract(contract, value)
         payload: dict[str, JsonValue] = {"stageRunId": stage_run_id, "output": value}
@@ -253,12 +276,19 @@ class ConvexWorkerClient:
     @staticmethod
     def _model_json(model: BaseModel) -> dict[str, JsonValue]:
         try:
-            value = _json_value(json.loads(model.model_dump_json(by_alias=True)))
+            value = _json_value(model.model_dump(mode="python", by_alias=True, warnings=False))
         except (json.JSONDecodeError, ValueError):
             raise WorkerClientError("CONTRACT_INVALID") from None
         if not isinstance(value, dict):
             raise WorkerClientError("CONTRACT_INVALID")
         return value
+
+    @staticmethod
+    def _validate_request(model: type[BaseModel], payload: dict[str, JsonValue]) -> None:
+        try:
+            model.model_validate(payload)
+        except ValidationError:
+            raise WorkerClientError("CONTRACT_INVALID") from None
 
     @staticmethod
     def _optional(payload: dict[str, JsonValue], key: str, value: str | None) -> None:
@@ -302,9 +332,9 @@ class ConvexWorkerClient:
             raise WorkerClientError("TRANSPORT_FAILED") from None
         try:
             decoded = raw.decode("utf-8")
-            data = json.loads(decoded)
+            data = _json_value(json.loads(decoded))
             return response_type.model_validate(data)
-        except (UnicodeDecodeError, json.JSONDecodeError, ValidationError):
+        except (UnicodeDecodeError, json.JSONDecodeError, ValidationError, ValueError):
             raise WorkerClientError("INVALID_RESPONSE") from None
 
     def _read_bounded(self, result: _ReadableResponse, deadline: float) -> bytes:

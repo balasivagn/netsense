@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar, TypeVar
+from uuid import uuid4
 
 import pytest
 from pydantic import BaseModel
@@ -24,7 +25,7 @@ from netsense_runner.contracts.TranscodeOutput import TranscodeOutput
 from netsense_runner.contracts.TranscribeOutput import TranscribeOutput
 
 ROOT = Path(__file__).resolve().parents[2]
-TOKEN = "ephemeral-test-token"
+TOKEN = uuid4().hex
 
 
 def fixture(name: str) -> dict[str, object]:
@@ -114,7 +115,8 @@ def test_get_job_maps_projection_and_strict_response(server: tuple[str, type[Han
     handler.responder = staticmethod(lambda _path, _body: (200, json.dumps(payload).encode()))
     result = client(url).get_job()
     assert result.session.studentLabel == "synthetic student"
-    assert result.session.subjectRole is None
+    assert result.session.subjectRole == "batter"
+    assert result.inputs.uploadId == "synthetic-upload"
     assert handler.calls == [("/worker/job", {}, f"Bearer {TOKEN}")]
     handler.responder = staticmethod(lambda _path, _body: (200, b'{"ok":true,"extra":1}'))
     with pytest.raises(WorkerClientError, match="^INVALID_RESPONSE$"):
@@ -142,8 +144,8 @@ def test_all_routes_and_omitted_optionals(server: tuple[str, type[Handler]]) -> 
             stage="transcode",
             worker_id="worker",
             attempt=1,
-            idempotency_key="key",
-            input_hash="hash",
+            idempotency_key="a" * 64,
+            input_hash="b" * 64,
         )
         == "synthetic-stage-run"
     )
@@ -285,3 +287,86 @@ def test_origin_and_timeout_validation(origin: str) -> None:
         ConvexWorkerClient(origin, TOKEN)
     with pytest.raises(ValueError):
         ConvexWorkerClient("http://localhost", TOKEN, timeout_s=float("inf"))
+
+
+def test_rejects_wrong_upload_nesting_role_and_anchor_shape(
+    server: tuple[str, type[Handler]],
+) -> None:
+    url, handler = server
+    for change in ("upload", "role", "box", "extra", "missing", "nonfinite"):
+        payload = fixture("worker_http/job-projection.json")
+        payload["config"] = fixture("contracts/PipelineConfig.json")["valid"]
+        session = payload["session"]
+        inputs = payload["inputs"]
+        assert isinstance(session, dict) and isinstance(inputs, dict)
+        if change == "upload":
+            inputs["upload"] = {
+                k: inputs.pop(k)
+                for k in ("uploadId", "sourceKey", "declaredBytes", "declaredSha256", "mimeType")
+            }
+        elif change == "role":
+            session["subjectRole"] = None
+        elif change == "box":
+            session["subjectAnchor"] = {
+                "box": {"arbitrary": 1},
+                "frameMs": 0,
+                "referenceCropKey": "sessions/synthetic-session/crop.jpg",
+            }
+        elif change == "extra":
+            session["unknown"] = True
+        elif change == "missing":
+            del session["subject"]
+        else:
+            session["durationMs"] = float("inf")
+        handler.responder = staticmethod(lambda _path, _body: (200, json.dumps(payload).encode()))
+        with pytest.raises(WorkerClientError, match="^INVALID_RESPONSE$"):
+            client(url).get_job()
+
+
+def test_rejects_bad_lifecycle_inputs_and_provenance_before_network(
+    server: tuple[str, type[Handler]],
+) -> None:
+    url, handler = server
+    c = client(url)
+    for attempt in (0, -1, True):
+        with pytest.raises(WorkerClientError, match="^CONTRACT_INVALID$"):
+            c.start_stage(
+                stage="plan",
+                worker_id="worker",
+                attempt=attempt,
+                idempotency_key="a" * 64,
+                input_hash="b" * 64,
+            )
+    with pytest.raises(WorkerClientError, match="^CONTRACT_INVALID$"):
+        c.start_stage(
+            stage="plan",
+            worker_id="worker",
+            attempt=1,
+            idempotency_key="short",
+            input_hash="b" * 64,
+        )
+    for cost in (-1.0, float("nan"), float("inf")):
+        with pytest.raises(WorkerClientError, match="^CONTRACT_INVALID$"):
+            c.finish_stage(
+                stage_run_id="synthetic-run",
+                status="failed",
+                sam_frames=0,
+                input_tokens=0,
+                output_tokens=0,
+                cost_usd=cost,
+            )
+    with pytest.raises(WorkerClientError, match="^CONTRACT_INVALID$"):
+        c.done(status="failed", error_code="unknown")
+    provenance = output("Provenance", Provenance).model_copy(
+        update={"stageRunIds": {"unknown": "x"}}
+    )
+    with pytest.raises(WorkerClientError, match="^CONTRACT_INVALID$"):
+        c.persist_marks("synthetic-run", output("PlaceOutput", PlaceOutput), provenance=provenance)
+    assert handler.calls == []
+
+
+def test_ok_requires_boolean_true(server: tuple[str, type[Handler]]) -> None:
+    url, handler = server
+    handler.responder = staticmethod(lambda _path, _body: (200, b'{"ok":1}'))
+    with pytest.raises(WorkerClientError, match="^INVALID_RESPONSE$"):
+        client(url).heartbeat()
