@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping
-from typing import Literal, cast
+from typing import cast
 
 from netsense_runner.adapters.rules import SubjectRole
 from netsense_runner.context import StageContext
@@ -13,7 +13,7 @@ from netsense_runner.contracts.CheckInput import CheckInput
 from netsense_runner.contracts.TrackFile import TrackFile
 from netsense_runner.json_types import JsonValue
 from netsense_runner.rules.checker import CheckerConfig, check_marks
-from netsense_runner.stage import StageResult, Usage
+from netsense_runner.stage import StageKey, StageResult, Usage, WorkerType
 
 TrackFileLoader = Callable[[str], bytes]
 
@@ -27,8 +27,8 @@ class CheckRulesWorker:
     """
 
     id: str = "check.rules@1"
-    stage: Literal["check"] = "check"
-    worker_type: Literal["rules"] = "rules"
+    stage: StageKey = "check"
+    worker_type: WorkerType = "rules"
     input_contract: str = "CheckInput"
     output_contract: str = "CheckOutput"
 
@@ -42,7 +42,7 @@ class CheckRulesWorker:
         self._config = config or CheckerConfig()
         self._subject_role = subject_role
 
-    def run(self, input_value: Mapping[str, JsonValue], _ctx: StageContext) -> StageResult:
+    def run(self, input_value: Mapping[str, JsonValue], ctx: StageContext) -> StageResult:
         try:
             check_input = cast(CheckInput, validate_contract("CheckInput", json.dumps(input_value)))
         except (TypeError, ValueError):

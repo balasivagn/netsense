@@ -52,3 +52,7 @@ not mutate mode/config or force stills; the future DAG owns that choice.
 L5/T1.09 should call the worker after stage-boundary validation and use its
 returned `StageResult`; it owns persistence and per-remark isolation.  No
 schema changes were made.
+
+Parent verification adds a typed `StageWorker` assignment test and a regression
+for mismatched neutral-label metadata: both `neutralLabel` and `labelText` must
+match the pinned subject role. Boolean coverage thresholds are rejected.

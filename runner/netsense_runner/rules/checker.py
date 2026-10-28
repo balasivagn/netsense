@@ -39,7 +39,8 @@ class CheckerConfig:
 
     def __post_init__(self) -> None:
         if (
-            not isfinite(self.min_mark_coverage)
+            isinstance(self.min_mark_coverage, bool)
+            or not isfinite(self.min_mark_coverage)
             or self.min_mark_coverage < 0
             or self.min_mark_coverage > 1
         ):
@@ -127,7 +128,11 @@ def _label_reason(
         if subject_role is None or mark.labelSpan is not None:
             return "label_mismatch"
         expected_neutral = RulesAdapter.neutral_label(subject_role)
-        return None if mark.labelText == expected_neutral else "label_mismatch"
+        return (
+            None
+            if mark.neutralLabel == expected_neutral and mark.labelText == expected_neutral
+            else "label_mismatch"
+        )
     if mark.labelSpan is None:
         return "label_mismatch"
     text = turns.get(mark.labelSpan.turnId)

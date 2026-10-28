@@ -14,6 +14,7 @@ from netsense_runner.contracts.TrackFile import TrackFile
 from netsense_runner.json_types import JsonValue
 from netsense_runner.rules.checker import CheckerConfig, TrackDataError, check_marks
 from netsense_runner.rules.stills_routing import TrackedRemark, should_route_to_stills
+from netsense_runner.stage import StageWorker
 from netsense_runner.stages.s7_check import CheckRulesWorker
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -248,3 +249,21 @@ def test_stills_routing_excludes_notes_and_never_routes_an_empty_denominator() -
     )
     with pytest.raises(ValueError, match="STILLS_THRESHOLD_INVALID"):
         should_route_to_stills([], nan)
+
+
+def test_neutral_label_identity_and_rendered_text_must_both_match_role() -> None:
+    input_data, track_data = _input(), _track()
+    _mark(input_data).update({"labelSpan": None, "neutralLabel": "Bowler", "labelText": "Batter"})
+    check_input, track = _models(input_data, track_data)
+    assert (
+        check_marks(check_input, track, CheckerConfig(), "batter").verdicts[0].reason
+        == "label_mismatch"
+    )
+
+
+def test_checker_conforms_to_registry_worker_protocol() -> None:
+    worker: StageWorker = CheckRulesWorker(lambda _ref: json.dumps(_track()).encode())
+    result = worker.run(cast(dict[str, JsonValue], _input()), ctx=cast(StageContext, object()))
+    assert result["status"] == "done"
+    with pytest.raises(ValueError, match="CHECKER_CONFIG_INVALID"):
+        CheckerConfig(min_mark_coverage=True)
