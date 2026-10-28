@@ -14,6 +14,7 @@ import { compile } from "json-schema-to-typescript";
 import { loadSchemas, dereference } from "./schema-utils";
 import { convexValidator } from "./convex-validator-source";
 import { modelSchemas } from "./lint-model-schemas";
+import { persistenceSources } from "./persistence-validators";
 const registry = loadSchemas();
 const check = process.argv.includes("--check");
 await mkdir(".orca-scratch", { recursive: true });
@@ -22,7 +23,7 @@ try {
   const schemas = (await readdir("packages/contracts/schemas"))
     .filter((n) => n.endsWith(".json"))
     .sort();
-  const outputs: Record<string, string> = {};
+  const outputs: Record<string, string> = persistenceSources(registry);
   for (const file of schemas) {
     const name = file.slice(0, -5);
     const schema = dereference(registry[file], file, registry);
@@ -150,6 +151,13 @@ try {
       .update(await readFile(`packages/contracts/schemas/${file}`));
   const foundationSources = [
     "convex/schema.ts",
+    "convex/pipeline.ts",
+    "convex/http.ts",
+    "convex/worker.ts",
+    "convex/lib/httpInput.ts",
+    "packages/contracts/validateSchema.ts",
+    "scripts/persistence-validators.ts",
+    "scripts/convex-validator-source.ts",
     "convex/validators.ts",
     "convex/errorCodes.ts",
     "convex/coaches.ts",

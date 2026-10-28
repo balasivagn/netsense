@@ -18,6 +18,10 @@
       "sha256": "b21a872881a1185be8bf5f264a693c46fdf3e204a45b9ffef7abe317f690d08a"
     },
     {
+      "path": "convex/http.ts",
+      "sha256": "7eeceb72eaaba31e54a8fd5b3f4210ca1842672fa94b7c201ed9ec51da4fb9c8"
+    },
+    {
       "path": "convex/jobs.ts",
       "sha256": "6428292e19c94323108c9559e0e229bc4079b16a3322256fa1a54acef9b5a035"
     },
@@ -26,8 +30,16 @@
       "sha256": "0c2964fddf5cb2c23ea559c364c40a1e8fbe89ea817d1e6accfa83a04f5b17d8"
     },
     {
+      "path": "convex/lib/httpInput.ts",
+      "sha256": "8cc131070c7f3ed5c4661453ed92369841f905e1ea7e1ffde7c0740c229a5ebb"
+    },
+    {
+      "path": "convex/pipeline.ts",
+      "sha256": "c30186fc57b40e7e882fb23fef16e002219176da9e7e1be3650fd83cb66fd260"
+    },
+    {
       "path": "convex/schema.ts",
-      "sha256": "a308a6f2b323111e04d02b464bae1fcb33e9d76be4af8215a98d9f94dc5a0312"
+      "sha256": "db2d41ae022877c928b2365ba121c698d343e8c7099f3d71895e07aaba51fb5c"
     },
     {
       "path": "convex/sessions.ts",
@@ -48,6 +60,22 @@
     {
       "path": "convex/validators.ts",
       "sha256": "e45d4add70b581c712967090cd00bd9d5a11453d558265547fe16c993bb95a23"
+    },
+    {
+      "path": "convex/worker.ts",
+      "sha256": "0fec7a4e47c265f8b1ede5d7a26a1fd617e9cc7b3ede6393ed7c43915696cfd0"
+    },
+    {
+      "path": "packages/contracts/validateSchema.ts",
+      "sha256": "890cd5d7e1fe7a38c51345d62e56f4ebefd61c7a1f2048e0b1b746403e705fa0"
+    },
+    {
+      "path": "scripts/convex-validator-source.ts",
+      "sha256": "13d1b70d1c2429b72134be5140154236c0f613da497a8e920beb4cbe31f56d29"
+    },
+    {
+      "path": "scripts/persistence-validators.ts",
+      "sha256": "e6ff3a5586fb34149e1e09678f3843b23931b750d6dbea851b6dce69974a9e7a"
     }
   ],
   "algorithm": "sha256(filename + source bytes, sorted filenames)",
