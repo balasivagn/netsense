@@ -187,3 +187,17 @@ rasterization parity, notes/focus/practice suggestion actions (T1.25), sharing,
 student/finalize and typed/per-remark recovery execution remain outside this
 correction. Local verification is not represented as live acceptance. No merge,
 watch, paid API call, deployment, main write, secret or real footage was used.
+
+## Parent retime review correction
+
+The actual Next/private-Convex/local-storage regression reproduced an approval
+after an earlier subject swap (HTTP 200). Verification now rejects any range
+extending past the first swap, matching both renderers' identity suppression;
+retiming past a swap cannot restore the selected subject. A swap at the exclusive
+range end remains outside the mark. The regression now receives 409, with the
+annotation unchanged and no private approval commit.
+
+Parent validation: `pnpm check` PASS (**530 JS / 395 runner / 62 orchestrator**);
+focused verification/handler tests **32 PASS**; production web build, contract
+drift, secret scan and diff check PASS. The real pre-commit hook runs on this
+correction. Browser E2E and live vendor/device behavior remain UNTESTED.

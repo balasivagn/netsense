@@ -1344,7 +1344,9 @@ It checks source TranscodeOutput against its canonical persistence receipt and
 measured dimensions/duration. Frame observations are subject-only, distinct,
 half-open, and excluded when declared in a gap; coverage uses the checker formula
 `min(observed,ceil(duration*fps/1000))/ceil(duration*fps/1000)` (one expected
-observation for fps zero). Swaps inside the range reject. Still mode additionally
+observation for fps zero). A swap before the exclusive range end rejects, including
+an earlier swap before the new start: renderers suppress the track from its first
+swap onward, and retiming alone cannot restore subject identity. Still mode additionally
 requires the actual selected keyframe observation; note-only reads no overlay
 track. Whole-track summary coverage cannot authorize or veto a verified new
 range. Role, integer bounds, moment limits, generated mark enums, pinned allowlist

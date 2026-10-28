@@ -19,7 +19,9 @@ export function verifyRange(
     !track.subjectOnly
   )
     throw Error("INVALID_RANGE");
-  if (track.swaps.some((s) => start <= s.ms && s.ms < end))
+  // Renderers suppress every observation from the first swap onward. Moving a
+  // mark beyond that swap cannot recover identity; a fresh subject track must.
+  if (track.swaps.some((s) => s.ms < end))
     throw Error("SUBJECT_SWAP");
   const inGap = (ms: number) => track.gaps.some(([a, b]) => a <= ms && ms < b);
   const observed = new Set(

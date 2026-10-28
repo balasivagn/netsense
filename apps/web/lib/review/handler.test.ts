@@ -218,6 +218,29 @@ for (const source of [
       await c.cleanup();
     }
   });
+test("retiming past an earlier subject swap cannot approve a renderer-suppressed track", async () => {
+  const c = await harness();
+  try {
+    await c.coach.mutation(api.review.edit, {
+      annotationId: c.id,
+      startMs: 200,
+      endMs: 1000,
+      markType: "circle",
+      anchor: "box_top",
+      neutralLabel: "Batter",
+    });
+    await c.put(c.view.tracks[0].fileRef, {
+      ...fixture.track,
+      swaps: [{ ms: 100, reason: "jump" }],
+    });
+    const before = await c.t.run((ctx) => ctx.db.get(c.id));
+    expect((await c.request()).status).toBe(409);
+    expect(await c.t.run((ctx) => ctx.db.get(c.id))).toEqual(before);
+    expect(c.getCommits()).toBe(0);
+  } finally {
+    await c.cleanup();
+  }
+});
 for (const race of [
   "edit",
   "delete",
