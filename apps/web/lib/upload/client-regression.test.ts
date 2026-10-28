@@ -535,14 +535,86 @@ test("a transport deadline retries the part while a current upload still owns it
   const { transport } = setup(4);
   let calls = 0;
   transport.put = vi.fn(async (_, part) => {
-    if (++calls === 1) throw new DOMException("Upload interrupted", "AbortError");
+    if (++calls === 1)
+      throw new DOMException("Upload interrupted", "AbortError");
     return { etag: "etag", bytes: part.size };
   });
   const client = new MultipartUploadController({
-    coachId: "c", sessionId: "s", file: file(4), transport,
-    recovery: browserRecoveryStore(null), retryDelaysMs: [0],
+    coachId: "c",
+    sessionId: "s",
+    file: file(4),
+    transport,
+    recovery: browserRecoveryStore(null),
+    retryDelaysMs: [0],
   });
-  expect(await client.start()).toMatchObject({ phase: "ready_to_complete", confirmedBytes: 4 });
+  expect(await client.start()).toMatchObject({
+    phase: "ready_to_complete",
+    confirmedBytes: 4,
+  });
   expect(transport.signParts).toHaveBeenCalledTimes(2);
   expect(transport.confirm).toHaveBeenCalledTimes(1);
+});
+
+test("local source cap accepts 2 GiB metadata and rejects larger files before hashing or transport", () => {
+  const { transport } = setup();
+  const slice = vi.fn(() => file());
+  const options = {
+    coachId: "c",
+    sessionId: "s",
+    transport,
+    recovery: browserRecoveryStore(null),
+  };
+  const client = new MultipartUploadController({
+    ...options,
+    file: { size: 2 * 1024 ** 3, type: "video/mp4", slice },
+  });
+  expect(client.snapshot.bytesTotal).toBe(2 * 1024 ** 3);
+  expect(
+    () =>
+      new MultipartUploadController({
+        ...options,
+        file: { size: 2 * 1024 ** 3 + 1, type: "video/mp4", slice },
+      }),
+  ).toThrow("INVALID_FILE");
+  expect(slice).not.toHaveBeenCalled();
+  expect(transport.initialize).not.toHaveBeenCalled();
+  client.dispose();
+});
+
+test("recovery and confirmed totals honor the local 2 GiB cap", async () => {
+  let stored: string | null = null;
+  const recovery = browserRecoveryStore({
+    getItem: () => stored,
+    setItem: (_: string, value: string) => {
+      stored = value;
+    },
+    removeItem: () => {
+      stored = null;
+    },
+  } as unknown as Storage);
+  const metadata = {
+    version: 1 as const,
+    sha256: "a".repeat(64),
+    bytesTotal: 2 * 1024 ** 3,
+    mimeType: "video/mp4",
+  };
+  recovery.write("c", "s", metadata);
+  expect(recovery.read("c", "s")).toEqual(metadata);
+  stored = JSON.stringify({ ...metadata, bytesTotal: metadata.bytesTotal + 1 });
+  expect(recovery.read("c", "s")).toBeNull();
+  for (const bytesConfirmed of [metadata.bytesTotal, metadata.bytesTotal + 1]) {
+    const transport = createUploadTransport(async () =>
+      Response.json({ bytesConfirmed }),
+    );
+    const result = transport.confirm(
+      "u",
+      { partNumber: 1, etag: "etag", bytes: 1 },
+      signal(),
+    );
+    if (bytesConfirmed === metadata.bytesTotal) {
+      await expect(result).resolves.toEqual({ bytesConfirmed });
+    } else {
+      await expect(result).rejects.toThrow("INVALID_RESPONSE");
+    }
+  }
 });

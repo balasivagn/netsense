@@ -121,7 +121,7 @@ export class MultipartUploadController {
       !options.file ||
       !Number.isSafeInteger(options.file.size) ||
       options.file.size < 1 ||
-      options.file.size > 5 * 1024 ** 3 ||
+      options.file.size > 2 * 1024 ** 3 ||
       typeof options.file.slice !== "function" ||
       !["video/mp4", "video/webm", "video/quicktime"].includes(
         options.file.type,

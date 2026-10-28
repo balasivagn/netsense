@@ -677,7 +677,9 @@ returns `400 {error:"INVALID_REQUEST"}`; other rejected operations expose only
 service configuration returns `503 {error:"SERVICE_UNAVAILABLE"}`. Responses use
 `Cache-Control: no-store`; no upload path logs payloads, identities or URLs.
 
-The local slice accepts integer `bytesTotal` in 1..2 GiB and MIME `video/mp4`,
+The local slice accepts integer `bytesTotal` in 1..2 GiB; browser file admission,
+recovery metadata and confirmed-byte responses enforce that same cap before
+hashing or upload. MIME is `video/mp4`,
 `video/quicktime`, or `video/webm`. SHA-256 is lowercase 64 hex. `fileName` is
 validated as a nonempty string <=1024 characters and never used as a storage key.
 Parts are 8 MiB except the final remainder; signing accepts 1..32 unique part

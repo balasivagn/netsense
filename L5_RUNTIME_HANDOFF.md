@@ -7,8 +7,8 @@ No subagents, other checkouts, paid calls, real-person media, web UI, provisioni
 or deployment. Narrow authorized upload admission/reservation cap edits are included.
 Parent subsequently integrated browser uploader PR19 at
 `9411703396439b2c91206ec74c2bd8c053e457c4`; this branch excludes it. Its client
-files are untouched. **Parent must align PR19's current 5 GiB client validation
-with this local server/runtime 2 GiB cap when integrating.**
+files are untouched. The subsequent parent integration below aligns PR19 with this local
+server/runtime 2 GiB cap.
 
 ## Executable path and commands
 
@@ -230,5 +230,20 @@ Automatic requeue stays disabled. Single new-tap/missing-moment policy is unchan
 T1.09/T1.11 remain PARTIAL; full browser M1 E2E, live vendor behavior, paid budget
 recovery, Modal, stage_retry and finalize remain UNTESTED/unimplemented as above.
 PR20 stays draft for parent review; nothing is merged into the parent integration.
-Parent alignment required: PR19's 5 GiB client validation (integrated separately
-at `9411703396439b2c91206ec74c2bd8c053e457c4`) must match this 2 GiB local cap.
+Parent alignment completed below: PR19 browser validation now matches the 2 GiB local cap.
+
+## Combined parent acceptance
+
+Parent reviewed the transactional control/reconciliation changes and integrated
+PR19's browser upload controller plus PR21's capture controls. The controller,
+recovery metadata and confirmed-byte response validation now all enforce the
+same 2 GiB local cap as admission/reservation and the executable runner.
+Two additional boundary regressions accept exactly 2 GiB and reject 2 GiB + 1
+without allocating media or initiating hashing/network work.
+
+`pnpm check`: PASS — **424 JS / 395 runner / 62 orchestrator tests**, strict
+lint/type checks, generated contract drift and Convex checks. Production web
+build, secret scan and `git diff --check`: PASS. The real commit hook runs on
+the parent correction. Full browser upload → review → share → student E2E still
+does not exist; live Clerk/Convex and vendor behavior remain UNTESTED. Automatic
+requeue remains disabled for the documented incomplete-attempt recovery gap.

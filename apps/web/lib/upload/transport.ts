@@ -33,7 +33,7 @@ const integer = (value: unknown) => {
     typeof value !== "number" ||
     !Number.isSafeInteger(value) ||
     value < 0 ||
-    value > 5 * 1024 ** 3
+    value > 2 * 1024 ** 3
   )
     throw invalid();
   return value;

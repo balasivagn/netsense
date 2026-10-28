@@ -34,7 +34,7 @@ const valid = (value: unknown): value is UploadRecovery => {
     typeof candidate.bytesTotal === "number" &&
     Number.isSafeInteger(candidate.bytesTotal) &&
     candidate.bytesTotal > 0 &&
-    candidate.bytesTotal <= 5 * 1024 ** 3 &&
+    candidate.bytesTotal <= 2 * 1024 ** 3 &&
     typeof candidate.mimeType === "string" &&
     ["video/mp4", "video/quicktime", "video/webm"].includes(
       candidate.mimeType,

@@ -10,7 +10,7 @@ No server handler, Convex, contract, SPEC, runner or orchestrator changes.
   (default 1 MiB, maximum 8 MiB); validates source lengths and cancellation.
 - `MultipartUploadController` takes coach/session IDs, the picked File/Blob,
   transport and recovery store. Files must match the server's supported MIME and
-  1..5 GiB size bounds. Concurrency is 1..32 (default 2). Retry delays default to
+  1..2 GiB size bounds. Concurrency is 1..32 (default 2). Retry delays default to
   2/8/30 seconds, at most ten delays, each at most 60 seconds.
 - `createUploadTransport(fetcher?, { timeoutMs?, putTimeoutMs? })` implements
   the five existing POST endpoints and signed PUT. Defaults are 30 seconds for
@@ -120,3 +120,9 @@ test failed before the fix and passes afterward.
 Final parent `pnpm check`: **399 JS, 383 runner, 33 orchestrator tests passed**,
 including **82 upload tests**, lint/typechecks, contract drift and offline Convex
 bindings. Full browser upload-to-student E2E remains pending.
+
+
+Runtime integration aligns browser admission, recovery metadata and confirmed
+response totals with the local server/host 2 GiB cap. Metadata-only regressions
+accept exactly 2 GiB and reject 2 GiB + 1 without allocating a large file or
+starting hashing/storage. Larger-file support remains UNTESTED.
