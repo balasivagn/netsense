@@ -26,6 +26,14 @@ const SESSION_PREFIX = "sessions/";
 // construct a fresh adapter); a multi-process local deployment is unsupported.
 const mutations = new Map<string, Promise<void>>();
 type Part = { partNumber: number; etag: string };
+type MediaRange = {
+  stream: ReturnType<typeof createReadStream>;
+  start: number;
+  end: number;
+  size: number;
+  contentType?: string;
+  partial: boolean;
+};
 
 type UploadState = {
   key: string;
@@ -550,13 +558,10 @@ export class LocalVideoStorage implements VideoStorage {
             throw new StorageError("PART_CONFLICT", 409);
         }
       } else {
-        try {
-          await link(temporary, target);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code === "EEXIST")
-            throw new StorageError("OBJECT_ALREADY_EXISTS", 409);
-          throw error;
-        }
+        // Direct PUT matches object-storage replacement semantics. Worker retries
+        // and final renders may replace an existing derivative at the same key.
+        // Multipart source parts/completion still use immutable create-only links.
+        await rename(temporary, target);
         const metadata = await this.target(
           `${this.partsRoot(signed.key)}/object.json`,
         );
@@ -604,7 +609,12 @@ export class LocalVideoStorage implements VideoStorage {
   private async contentTypeFor(key: string): Promise<string | undefined> {
     const dir = await this.target(this.partsRoot(key));
     try {
-      for (const name of await readdir(dir)) {
+      const names = await readdir(dir);
+      // A direct PUT supersedes a prior multipart object's content type.
+      names.sort(
+        (a, b) => Number(b === "object.json") - Number(a === "object.json"),
+      );
+      for (const name of names) {
         if (!name.endsWith(".json")) continue;
         const state = JSON.parse(
           await readFile(
@@ -623,59 +633,68 @@ export class LocalVideoStorage implements VideoStorage {
   async openRange(
     key: string,
     rangeHeader: string | null,
-  ): Promise<{
-    stream: ReturnType<typeof createReadStream>;
-    start: number;
-    end: number;
-    size: number;
-    contentType?: string;
-    partial: boolean;
-  }> {
+  ): Promise<MediaRange> {
+    // Snapshot the opened inode, length and type while writers hold the same
+    // lock. A later replacement cannot truncate or change this response's bytes.
+    return this.mutate(key, () => this.openRangeUnlocked(key, rangeHeader));
+  }
+
+  private async openRangeUnlocked(
+    key: string,
+    rangeHeader: string | null,
+  ): Promise<MediaRange> {
     const object = await this.target(key);
-    let size: number;
+    let handle: Awaited<ReturnType<typeof open>>;
     try {
-      const metadata = await stat(object);
-      if (!metadata.isFile()) throw new StorageError("OBJECT_NOT_FOUND", 404);
-      size = metadata.size;
+      handle = await open(object, "r");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT")
         throw new StorageError("OBJECT_NOT_FOUND", 404);
       throw error;
     }
-    let start = 0,
-      end = Math.max(0, size - 1),
-      partial = false;
-    if (rangeHeader) {
-      const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
-      if (!match || (!match[1] && !match[2]))
-        throw new StorageError("RANGE_NOT_SATISFIABLE", 416, size);
-      partial = true;
-      if (!match[1]) {
-        const length = Number(match[2]);
-        if (!Number.isSafeInteger(length) || length < 1)
+    try {
+      const metadata = await handle.stat();
+      if (!metadata.isFile()) throw new StorageError("OBJECT_NOT_FOUND", 404);
+      const size = metadata.size;
+      let start = 0,
+        end = Math.max(0, size - 1),
+        partial = false;
+      if (rangeHeader) {
+        const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
+        if (!match || (!match[1] && !match[2]))
           throw new StorageError("RANGE_NOT_SATISFIABLE", 416, size);
-        start = Math.max(0, size - length);
-      } else {
-        start = Number(match[1]);
-        end = match[2] ? Number(match[2]) : end;
+        partial = true;
+        if (!match[1]) {
+          const length = Number(match[2]);
+          if (!Number.isSafeInteger(length) || length < 1)
+            throw new StorageError("RANGE_NOT_SATISFIABLE", 416, size);
+          start = Math.max(0, size - length);
+        } else {
+          start = Number(match[1]);
+          end = match[2] ? Number(match[2]) : end;
+        }
+        if (
+          !Number.isSafeInteger(start) ||
+          !Number.isSafeInteger(end) ||
+          start < 0 ||
+          start >= size ||
+          end < start
+        )
+          throw new StorageError("RANGE_NOT_SATISFIABLE", 416, size);
+        end = Math.min(end, size - 1);
       }
-      if (
-        !Number.isSafeInteger(start) ||
-        !Number.isSafeInteger(end) ||
-        start < 0 ||
-        start >= size ||
-        end < start
-      )
-        throw new StorageError("RANGE_NOT_SATISFIABLE", 416, size);
-      end = Math.min(end, size - 1);
+      const contentType = await this.contentTypeFor(key);
+      return {
+        stream: handle.createReadStream({ start, end }),
+        start,
+        end,
+        size,
+        contentType,
+        partial,
+      };
+    } catch (error) {
+      await handle.close();
+      throw error;
     }
-    return {
-      stream: createReadStream(object, { start, end }),
-      start,
-      end,
-      size,
-      contentType: await this.contentTypeFor(key),
-      partial,
-    };
   }
 }

@@ -222,14 +222,14 @@ test("wrong upload state is represented as a typed storage error", async () => {
   ).rejects.toBeInstanceOf(StorageError);
 });
 
-test("direct PUT preserves type, refuses overwrite, and returns private empty responses", async () => {
+test("direct PUT preserves type, supports retry, and returns private empty responses", async () => {
   const url = await storage.signPutUrl(key, "video/synthetic", 60);
   expect((await put(url, new Uint8Array())).status).toBe(200);
   expect(await storage.head(key)).toEqual({
     bytes: 0,
     contentType: "video/synthetic",
   });
-  expect((await put(url, new Uint8Array())).status).toBe(409);
+  expect((await put(url, new Uint8Array())).status).toBe(200);
   const getUrl = await storage.signGetUrl(key, 60);
   const response = await GET(new Request(getUrl), context());
   expect(response.status).toBe(200);
@@ -243,6 +243,34 @@ test("direct PUT preserves type, refuses overwrite, and returns private empty re
   );
   expect(invalid.status).toBe(416);
   expect(invalid.headers.get("content-range")).toBe("bytes */0");
+});
+
+test("replacement PUT keeps an already-open GET consistent and exposes the new complete object", async () => {
+  const bytes = new Uint8Array(
+    await readFile("fixtures/synthetic/storage/range.bin"),
+  );
+  const url = await storage.signPutUrl(key, "video/synthetic", 60);
+  expect((await put(url, bytes)).status).toBe(200);
+  const getUrl = await storage.signGetUrl(key, 60);
+  const original = await GET(new Request(getUrl), context());
+  const replacement = bytes.slice(0, 3);
+  const newUrl = await storage.signPutUrl(key, "application/octet-stream", 60);
+  const replaced = await PUT(
+    new Request(newUrl, {
+      method: "PUT",
+      headers: { "content-type": "application/octet-stream" },
+      body: replacement,
+    }),
+    context(),
+  );
+  expect(replaced.status).toBe(200);
+  expect(original.headers.get("content-length")).toBe(String(bytes.length));
+  expect(original.headers.get("content-type")).toBe("video/synthetic");
+  expect(new Uint8Array(await original.arrayBuffer())).toEqual(bytes);
+  const latest = await GET(new Request(getUrl), context());
+  expect(latest.headers.get("content-length")).toBe("3");
+  expect(latest.headers.get("content-type")).toBe("application/octet-stream");
+  expect(new Uint8Array(await latest.arrayBuffer())).toEqual(replacement);
 });
 
 test("confirmed part bytes cannot change and completed manifests are immutable", async () => {
