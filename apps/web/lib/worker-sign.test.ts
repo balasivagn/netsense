@@ -52,13 +52,13 @@ function storage(): VideoStorage & { calls: string[] } {
     abortMultipart: vi.fn(),
     head: vi.fn(),
     delete: vi.fn(),
-    signGetUrl: vi.fn(async (key: string) => {
+    signGetUrl: vi.fn(async (key: string, ttl: number) => {
       calls.push(`get:${key}`);
-      return `http://storage.invalid/get/${key}`;
+      return `http://storage.invalid/get/${key}?exp=${Math.floor(now / 1000) + ttl}`;
     }),
-    signPutUrl: vi.fn(async (key: string, contentType: string) => {
+    signPutUrl: vi.fn(async (key: string, contentType: string, ttl: number) => {
       calls.push(`put:${key}:${contentType}`);
-      return `http://storage.invalid/put/${key}`;
+      return `http://storage.invalid/put/${key}?exp=${Math.floor(now / 1000) + ttl}`;
     }),
   };
 }
@@ -97,6 +97,7 @@ async function request(value: unknown, auth?: string): Promise<Request> {
 }
 
 beforeEach(async () => {
+  now = 2_000_000_000_000;
   tokenSecret = secret();
   await mkdir(path.join(process.cwd(), ".orca-scratch"), { recursive: true });
   root = await mkdtemp(path.join(process.cwd(), ".orca-scratch", "worker-sign-"));
@@ -128,8 +129,8 @@ test("signs a validated ordered batch and sends the worker token to the current 
   expect(result.headers.get("cache-control")).toBe("no-store");
   expect(await result.json()).toEqual({
     urls: [
-      { op: "put", key: `sessions/${sessionId}/renders/final/full.mp4`, url: `http://storage.invalid/put/sessions/${sessionId}/renders/final/full.mp4`, expiresAt: now + 30_000 },
-      { op: "get", key: `sessions/${sessionId}/source/upload-001`, url: `http://storage.invalid/get/sessions/${sessionId}/source/upload-001`, expiresAt: now + 30_000 },
+      { op: "put", key: `sessions/${sessionId}/renders/final/full.mp4`, url: `http://storage.invalid/put/sessions/${sessionId}/renders/final/full.mp4?exp=${now / 1000 + 30}`, expiresAt: now + 30_000 },
+      { op: "get", key: `sessions/${sessionId}/source/upload-001`, url: `http://storage.invalid/get/sessions/${sessionId}/source/upload-001?exp=${now / 1000 + 30}`, expiresAt: now + 30_000 },
     ],
   });
 });
@@ -150,7 +151,7 @@ test("uses the local adapter's actual signed PUT implementation", async () => {
 test("rejects malformed, expired and bad-signature tokens before upstream or storage", async () => {
   const fetchImpl = vi.fn() as unknown as typeof fetch;
   const signed = handler(fetchImpl);
-  for (const auth of ["not-a-token", await token(now), (await token()).replace(/.$/, "x")]) {
+  for (const auth of ["not-a-token", await token(now), await signJobToken({ jobId, sessionId, exp: now + 60_000 }, secret())]) {
     const result = await signed.post(await request({ ops: [{ op: "get", key: `sessions/${sessionId}/source/upload-001` }] }, auth));
     expect(result.status).toBe(401);
   }
@@ -208,4 +209,49 @@ test("caps expiry by token and rejects an elapsed token or lease after the curre
   expect(((await result.json()) as { urls: { expiresAt: number }[] }).urls[0].expiresAt).toBe(now + 1_000);
   const elapsed = handler(vi.fn(async () => { now += 31_000; return response(job({ leaseUntil: now + 1_000 })); }) as unknown as typeof fetch);
   expect((await elapsed.post(await request({ ops: [{ op: "get", key: `sessions/${sessionId}/source/a` }] }, await token(now + 30_000)))).status).toBe(403);
+});
+
+test("upstream cleanup cancels incomplete bodies and leaves no deadline timers after success", async () => {
+  const cancel = vi.fn();
+  let signal: AbortSignal | undefined;
+  const fetchImpl = vi.fn(async (_input: URL | RequestInfo, init?: RequestInit) => {
+    signal = init?.signal ?? undefined;
+    return new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new Uint8Array(1_048_577)); },
+      cancel,
+    }));
+  }) as unknown as typeof fetch;
+  const signed = handler(fetchImpl);
+  expect((await signed.post(await request({ ops: [{ op: "get", key: `sessions/${sessionId}/source/a` }] }))).status).toBe(503);
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(signal?.aborted).toBe(true);
+  expect(signed.storage.calls).toEqual([]);
+
+  const input = await request({ ops: [{ op: "get", key: `sessions/${sessionId}/source/a` }] });
+  vi.useFakeTimers();
+  try {
+    const success = handler(vi.fn(async () => response(job())) as unknown as typeof fetch);
+    expect((await success.post(input)).status).toBe(200);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { vi.useRealTimers(); }
+});
+
+test("a stalled response body is cancelled at the overall upstream deadline", async () => {
+  const cancel = vi.fn();
+  const signed = handler(vi.fn(async () => new Response(new ReadableStream<Uint8Array>({ cancel }))) as unknown as typeof fetch);
+  expect((await signed.post(await request({ ops: [{ op: "get", key: `sessions/${sessionId}/source/a` }] }))).status).toBe(503);
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(signed.storage.calls).toEqual([]);
+});
+
+test("slow storage cannot expose a URL whose actual expiry exceeds the authorized lease", async () => {
+  const delayed = storage();
+  delayed.signGetUrl = async (_key, ttl) => {
+    now += 2_000;
+    return `http://storage.invalid/get?exp=${Math.floor(now / 1000) + ttl}`;
+  };
+  const signed = handler(vi.fn(async () => response(job())) as unknown as typeof fetch, delayed);
+  const result = await signed.post(await request({ ops: [{ op: "get", key: `sessions/${sessionId}/source/a` }] }));
+  expect(result.status).toBe(503);
+  expect(await result.json()).toEqual({ error: "WORKER_UNAVAILABLE" });
 });

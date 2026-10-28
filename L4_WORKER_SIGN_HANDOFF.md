@@ -20,3 +20,18 @@ no storage credentials are passed to the worker.
 
 T1.05 remains partial: this is the local worker-signing slice only. Coach media
 signing and the R2 adapter remain pending in their assigned lanes.
+
+Parent review hardened the upstream deadline to one cleared timer, aborts its fetch
+on every exit, and cancels incomplete response streams. The local URL's actual
+signed expiry is checked after signing, and returned as `expiresAt`; a delayed
+signer cannot return a URL extending past the token or lease. R2 is explicitly
+rejected until its expiry behavior is implemented and tested.
+
+Validation after review: 11 focused tests, including the actual Next POST export
+backed by the real convex-test HTTP router. The latter proves current-job success
+and rejection after a latest-job change, lease expiry, terminal transition, or
+foreign session claim. Stream cancellation, stalled bodies, timer cleanup and
+delayed storage expiry have regressions. Full `pnpm check` passes: 300 JS,
+280 runner and 33 orchestrator tests, plus lint, strict typechecks, contracts and
+offline bindings. Web build, secret scan and actual commit hook are checked
+before push. Live deployment and app E2E remain **UNTESTED**.

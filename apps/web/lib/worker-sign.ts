@@ -62,34 +62,28 @@ function bearer(request: Request): string | null {
 async function readLimited(
   body: ReadableStream<Uint8Array> | null,
   limit: number,
-  deadline: number | undefined = undefined,
+  timeout: Promise<never> | undefined = undefined,
 ): Promise<Uint8Array> {
   if (!body) throw new SignFailure(400, "INVALID_REQUEST");
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let length = 0;
+  let complete = false;
   try {
     while (true) {
-      const remaining = deadline === undefined ? undefined : deadline - Date.now();
-      if (remaining !== undefined && remaining <= 0)
-        throw new SignFailure(503, "WORKER_UNAVAILABLE");
-      const next = await (remaining === undefined
+      const next = await (timeout === undefined
         ? reader.read()
-        : Promise.race([
-            reader.read(),
-            new Promise<never>((_, reject) =>
-              setTimeout(
-                () => reject(new SignFailure(503, "WORKER_UNAVAILABLE")),
-                remaining,
-              ),
-            ),
-          ]));
-      if (next.done) break;
+        : Promise.race([reader.read(), timeout]));
+      if (next.done) {
+        complete = true;
+        break;
+      }
       length += next.value.byteLength;
       if (length > limit) throw new SignFailure(400, "INVALID_REQUEST");
       chunks.push(next.value);
     }
   } finally {
+    if (!complete) void reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
   const bytes = new Uint8Array(length);
@@ -194,14 +188,22 @@ async function latestLiveJob(
   let endpoint: URL;
   try {
     endpoint = new URL("/worker/job", deps.env.CONVEX_SITE_URL);
-    if (!/^https?:$/.test(endpoint.protocol)) throw Error("invalid protocol");
+    if (!/^https?:$/.test(endpoint.protocol) || endpoint.username || endpoint.password)
+      throw Error("invalid endpoint");
   } catch {
     throw new SignFailure(503, "WORKER_UNAVAILABLE");
   }
   const timeout = deps.upstreamTimeoutMs ?? WORKER_SIGN_UPSTREAM_TIMEOUT_MS;
+  if (!Number.isFinite(timeout) || timeout <= 0)
+    throw new SignFailure(503, "WORKER_UNAVAILABLE");
   const controller = new AbortController();
-  const deadline = Date.now() + timeout;
-  const timer = setTimeout(() => controller.abort(), timeout);
+  let timer: ReturnType<typeof setTimeout>;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new SignFailure(503, "WORKER_UNAVAILABLE"));
+    }, timeout);
+  });
   try {
     const response = await Promise.race([
       deps.fetch(endpoint, {
@@ -211,24 +213,24 @@ async function latestLiveJob(
         cache: "no-store",
         signal: controller.signal,
       }),
-      new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new SignFailure(503, "WORKER_UNAVAILABLE")),
-          timeout,
-        ),
-      ),
+      timedOut,
     ]);
-    if (!response.ok || response.redirected || !response.body)
-      throw new SignFailure(403, "WORKER_REJECTED");
+    if (!response.ok || response.redirected || !response.body) {
+      void response.body?.cancel().catch(() => undefined);
+      throw new SignFailure(
+        response.status === 401 || response.status === 403 ? 403 : 503,
+        response.status === 401 || response.status === 403 ? "WORKER_REJECTED" : "WORKER_UNAVAILABLE",
+      );
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(
         new TextDecoder("utf-8", { fatal: true }).decode(
-          await readLimited(response.body, WORKER_SIGN_RESPONSE_LIMIT, deadline),
+          await readLimited(response.body, WORKER_SIGN_RESPONSE_LIMIT, timedOut),
         ),
       );
     } catch (error) {
-      if (error instanceof SignFailure) throw error;
+      if (error instanceof SignFailure && error.status === 503) throw error;
       throw new SignFailure(503, "WORKER_UNAVAILABLE");
     }
     const job = workerJob(parsed);
@@ -244,7 +246,8 @@ async function latestLiveJob(
     if (error instanceof SignFailure) throw error;
     throw new SignFailure(503, "WORKER_UNAVAILABLE");
   } finally {
-    clearTimeout(timer);
+    clearTimeout(timer!);
+    controller.abort();
   }
 }
 
@@ -280,20 +283,27 @@ export function createWorkerSignHandler(deps: WorkerSignDependencies) {
       );
       const ttl = Math.min(configuredTtl(deps.env.SIGNED_URL_TTL_SECONDS), availableSeconds);
       if (ttl < 1) throw new SignFailure(403, "WORKER_REJECTED");
-      const expiresAt = (Math.floor((deps.now ?? Date.now)() / 1000) + ttl) * 1000;
+      const latestExpiry = Math.min(claims.exp, job.leaseUntil);
       const storage =
         typeof deps.storage === "function" ? deps.storage() : deps.storage;
+      // Only local signing has a verified expiry representation. R2 is pending.
+      if (storage.driver !== "local") throw new SignFailure(503, "WORKER_UNAVAILABLE");
       const urls = await Promise.all(
-        operations.map(async (operation) => ({
-          op: operation.op,
-          key: operation.key,
-          url:
-            operation.op === "get"
-              ? await storage.signGetUrl(operation.key, ttl)
-              : await storage.signPutUrl(operation.key, operation.contentType!, ttl),
-          expiresAt,
-        })),
+        operations.map(async (operation) => {
+          const url = operation.op === "get"
+            ? await storage.signGetUrl(operation.key, ttl)
+            : await storage.signPutUrl(operation.key, operation.contentType!, ttl);
+          const expiration = new URL(url).searchParams.get("exp");
+          const expiresAt = expiration && /^\d+$/.test(expiration)
+            ? Number(expiration) * 1000 : Number.NaN;
+          if (!Number.isSafeInteger(expiresAt) || expiresAt > latestExpiry)
+            throw new SignFailure(503, "WORKER_UNAVAILABLE");
+          return { op: operation.op, key: operation.key, url, expiresAt };
+        }),
       );
+      // Never expose a batch that expired while storage was signing it.
+      if (urls.some((item) => item.expiresAt <= (deps.now ?? Date.now)()))
+        throw new SignFailure(403, "WORKER_REJECTED");
       return Response.json(
         { urls },
         { headers: { "Cache-Control": "no-store" } },
