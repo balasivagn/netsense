@@ -10,8 +10,7 @@ async function runningJob(ctx: MutationCtx, id: Id<"jobs">) {
     throw Error("JOB_NOT_RUNNING");
   return job;
 }
-export const start = internalMutation({
-  args: {
+const startArgs = {
     jobId: v.id("jobs"),
     stage,
     remarkId: v.optional(v.string()),
@@ -21,8 +20,8 @@ export const start = internalMutation({
     inputHash: v.string(),
     promptHash: v.optional(v.string()),
     candidate: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
+};
+export async function startStageRun(ctx: MutationCtx, args: { jobId: Id<"jobs">; stage: Doc<"stageRuns">["stage"]; remarkId?: string; workerId: string; attempt: number; idempotencyKey: string; inputHash: string; promptHash?: string; candidate?: string }) {
     const job = await runningJob(ctx, args.jobId);
     if (
       !Number.isSafeInteger(args.attempt) ||
@@ -90,10 +89,12 @@ export const start = internalMutation({
       status: "running",
       startedAt: Date.now(),
     });
-  },
+}
+export const start = internalMutation({
+  args: startArgs,
+  handler: startStageRun,
 });
-export const finish = internalMutation({
-  args: {
+const finishArgs = {
     stageRunId: v.id("stageRuns"),
     status: stageStatus,
     outputRef: v.optional(v.string()),
@@ -103,8 +104,8 @@ export const finish = internalMutation({
     inputTokens: v.number(),
     outputTokens: v.number(),
     costUsd: v.number(),
-  },
-  handler: async (ctx, args) => {
+};
+export async function finishStageRun(ctx: MutationCtx, args: { stageRunId: Id<"stageRuns">; status: Doc<"stageRuns">["status"]; outputRef?: string; errorCode?: Doc<"stageRuns">["errorCode"]; errorDetail?: string; samFrames: number; inputTokens: number; outputTokens: number; costUsd: number }) {
     const run = await ctx.db.get(args.stageRunId);
     if (!run) throw Error("NOT_FOUND");
     const job = await runningJob(ctx, run.jobId);
@@ -202,5 +203,8 @@ export const finish = internalMutation({
       outputTokens: job.outputTokens + args.outputTokens,
       costUsd: job.costUsd + args.costUsd,
     });
-  },
+}
+export const finish = internalMutation({
+  args: finishArgs,
+  handler: finishStageRun,
 });

@@ -623,6 +623,10 @@ Key Convex functions (TypeScript, `convex/`):
 
 ## 10. Routes and APIs
 
+### 10.3a HTTP lifecycle clarification (T1.10 slice)
+
+`/svc/*` requires `Authorization: Bearer <CONVEX_SERVICE_SECRET>` and fails closed when the secret is unset. Worker job tokens contain exactly `{jobId,sessionId,exp}` where `exp` is epoch milliseconds. The signature is HMAC-SHA256 over the **raw UTF-8 JSON payload bytes**, then both payload and signature are base64url encoded as `payload.signature`; it is not an HMAC over an encoded segment. Persistence endpoints remain unregistered until their separate verbatim-validation implementation lands.
+
 ### 10.1 Pages (Next.js App Router, `apps/web/app/`)
 | Route | Screens | Auth |
 |---|---|---|
