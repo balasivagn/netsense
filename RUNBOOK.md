@@ -2,37 +2,7 @@
 
 For Bala and the coding agent. Times in SGT. Anything marked **UNTESTED** has not been run for NetSense yet; once it has been, remove the mark and add a row to the log at the bottom.
 
-## 0. Test readiness (v1.1, Wed 28 Oct 2026): what can be tested now vs after the weekend recordings
-
-Context: one selected person is tracked (DECISIONS F1). Bala's first 2 clips are his own batting with **no commentary**; coach commentary is recorded **Sat 31 Oct / Sun 1 Nov** (TASKS T0.8).
-
-**Testable now, no voice** (most also need no paid keys; see TASKS "Ready to test now"):
-
-| What | How | Keys? |
-|---|---|---|
-| Contracts, schema, Convex functions, job gating (upload + subject, either order) | `pnpm test:contracts`, `pnpm test` (convex-test) | no |
-| Full pipeline with fake workers, incl. subject anchor, fan-out, fake SAM stream with 3 people (only the subject kept) | `uv run pytest runner/tests` | no |
-| Sandbox lifecycle with the local driver (terminate in `finally`, sweeper, stale heartbeat) | `uv run pytest services/orchestrator/tests` | no |
-| Transcode on synthetic clips with and without audio (`hasAudio=false`) | `uv run pytest runner/tests/test_transcode.py` | no (ffmpeg only) |
-| Subject selection 07a (tap → normalised point → `sessions.subject`) | vitest + Playwright (1.1) | Clerk/Convex free dev keys for Playwright |
-| Render of a single-subject track (synthetic track) | `uv run pytest runner/tests/test_render.py` | no |
-| Test-only fixture guards (refuses in prod, banner, share refusal, `check-no-fixtures`) | pytest + vitest + `pnpm check:no-fixtures` | no |
-| Stages 1–7 mechanics on the test-only fixture (verbatim copy, schema, routing) | 1.8 below | no with `fake`; Meta key for real Muse Spark |
-| **Real** subject tracking on Bala's silent clips: anchor, re-identification, follow, swap guard, render, Modal lifecycle | Spike 1.4 and segment mode 1.9 | Meta key (+ Modal token for the Modal driver) |
-
-**Waits for the weekend recordings (real voice):**
-
-| What | When (SGT) |
-|---|---|
-| Voice Transcribe go/no-go (T0.7): turns usable, coach speaker separable, timing ~1 s | Sun 1 Nov by 6 PM |
-| Stage 1 live (T1.14) and stage 2 plan on real remarks (IC3, moved from Thu 29 Oct) | Sun 1 Nov |
-| Prompt tuning for stages 2, 3, 6 on real coach words | Sun 1 – Mon 2 Nov |
-| End to end with real commentary, no fixture (IC5b); hero session for the demo | Sun 1 Nov |
-| Live smoke `pnpm smoke:live` on a real commentary clip | Mon 2 Nov |
-
-Knock-on (WORKPLAN §5.1): about 1.5 days for real-voice tuning before the Mon 2 Nov freeze; the Sat 31 Oct cut decision is made without real-voice data; if commentary is not recorded by Sun 1 Nov 12 PM, the Tue 3 Nov demo video is at risk.
-
-**Never-ship rule for the test-only fixture (SPEC §2, §19.1):** "[TEST]" remarks are never in the demo video, screenshots, README, write-up or submission, and never shared with a student. Delete test-fixture sessions from prod before recording (3.3).
+Note: early test clips may lack commentary; that's a test-data gap, not a product mode.
 
 ## 1. Running
 
@@ -45,7 +15,7 @@ pnpm dev                          # Next.js + convex dev
 AGENT_PROVIDER_DEFAULT=fake pnpm orchestrator   # fake provider: test-only, refuses prod
 scripts/make-synthetic-clip.sh /tmp/synthetic.mp4   # synthetic test clip, never a real person
 ```
-Open `http://localhost:3000`, sign in, create a session (student + role), upload `/tmp/synthetic.mp4`, tap the person to follow on 07a, watch screen 12. `scripts/make-synthetic-clip.sh --no-audio` makes a silent variant.
+Open `http://localhost:3000`, sign in, create a session (student + role), upload `/tmp/synthetic.mp4`, tap the person to follow on 07a, watch screen 12.
 
 ### 1.2 Locally with real models
 Same as 1.1 but with `MODEL_API_KEY` set and `AGENT_PROVIDER_DEFAULT=meta`, and a real clip (adults who agreed to be filmed). Keep `SANDBOX_DRIVER=local` to avoid Modal, or set `modal` with the Modal token (SETUP 4). Check `pnpm cost:today` afterwards.
@@ -65,16 +35,15 @@ Free plan: the VM pauses after 30 min idle; open the public URL to wake it, then
 cd spike && uv sync
 cp ~/clips/*.mp4 ~/clips/*.mov clips/          # git-ignored
 bash transcode.sh clips/<clip>
+uv run python transcribe.py clips/<clip>.wav
 uv run python pick_subject.py clips/<clip>.proxy.mp4 --deliveries deliveries.csv   # Bala clicks the one person once per clip
 uv run python sam_image.py clips/<clip>.proxy.mp4 --deliveries deliveries.csv --anchor  # point prompt at the tap -> box + reference crop
 uv run python sam_window.py clips/<clip>.proxy.mp4 --deliveries deliveries.csv --subject # follow only the subject per delivery; review MP4s in out/
 uv run python subject_probe.py clips/<clip>.proxy.mp4 --deliveries deliveries.csv       # S-4 re-identification
 uv run python modal_smoke.py
 uv run python report.py > ../docs/spike/sam-spike.md
-# weekend, after commentary is recorded (T0.7):
-uv run python transcribe.py clips/<commentary-clip>.wav && uv run python report.py --voice
 ```
-`deliveries.csv` = one row per delivery or segment: `clip, delivery, startMs, endMs, subjectFrameMs, subjectX, subjectY` (times marked by eye; subject columns written by `pick_subject.py`). Silent clips are fine for everything except `transcribe.py`. For S-3, watch each review MP4 and mark it followed / swapped / lost in `out/s3_marks.csv`; a swap to another person on any delivery counts against the ≥ 4/5. Then fill the verdict (TASKS T0.6): Go / Partial (Still frames only) / No-go, and set `renderModeDefault`.
+`deliveries.csv` = one row per delivery or segment: `clip, delivery, startMs, endMs, subjectFrameMs, subjectX, subjectY` (times marked by eye; subject columns written by `pick_subject.py`). For S-3, watch each review MP4 and mark it followed / swapped / lost in `out/s3_marks.csv`; a swap to another person on any delivery counts against the ≥ 4/5. Then fill the verdict (TASKS T0.6): Go / Partial (Still frames only) / No-go, and set `renderModeDefault`.
 
 ### 1.5 One video end to end
 1. Sign in on the phone → + New session → pick the student and their role → Record or Upload → tap the person to follow (07a).
@@ -100,20 +69,6 @@ uv run --with modal python -c "import modal; a=modal.App.lookup('netsense-runner
 ```
 Every `sandboxes` row should have `terminatedAt` and `terminatedBy`.
 
-### 1.8 Stages 1–7 with the test-only fixture (no voice yet)
-```bash
-export NETSENSE_ENV=dev TEST_FIXTURES_ENABLED=1
-pnpm test-remarks:make --from spike/clips/deliveries.csv --clip <clip> --out local-fixtures/   # "[TEST] remark about delivery N: ..."
-TRANSCRIBE_PROVIDER=fixture TEST_FIXTURE_FILE=local-fixtures/<clip>.transcribe.json pnpm orchestrator
-```
-Upload the same real silent clip and tap the subject. Every coach screen of that session must show the red "TEST FIXTURE: not real coach remarks" banner. Use it to check mechanics (verbatim copy, routing, fan-out, marks, render), not prompt quality. Never record, screenshot or share these sessions. Refused when `NETSENSE_ENV=prod`. **UNTESTED** until T1.36.
-
-### 1.9 Segment mode: tracking and render on silent clips, no remarks at all
-```bash
-TRACK_SEGMENTS_FROM=spike/clips/deliveries.csv pnpm jobs:segments <sessionId>
-```
-Runs subject anchor → per-segment re-identification and tracking → preview render, one segment per delivery. Check the preview: only the selected person is outlined, no swaps. `pnpm runs:show <jobId>` lists `swapSuspected` per segment. **UNTESTED** until T1.17/T1.18.
-
 ## 2. Common failures and fixes
 
 | Symptom | Likely cause | Fix |
@@ -126,9 +81,8 @@ Runs subject anchor → per-segment re-identification and tracking → preview r
 | `SUBJECT_NOT_FOUND` / screen 16 | Selected person off-frame at that moment, or re-identification unsure (similar kit, crowded net) | Coach uses Tap them / Note only / Still frame. If frequent: pick the tap frame where the person is large and unblocked; check `stageRuns` `why` for the re-id step; keep the camera still. |
 | `SUBJECT_SWAP` / screen 16 "Tracking may have jumped to someone else" | Another person crossed in front; SAM id moved to them | Coach taps the right person at that moment (`remark_retrack`). If frequent: lower `trackPadMs` (shorter windows), raise `swapIouMin`, or try `downsampleFps` off. Log it below. |
 | Wrong person followed for the whole session | Tap landed on someone else | Review → "Change who to follow" (`subject_retrack`). |
-| Red "TEST FIXTURE" banner on a session | Session used the test-only fixture | Expected in dev. Never demo or share it; delete it from prod before recording. If it appears in prod: `TEST_FIXTURES_ENABLED` is wrongly set; unset it and log it. |
 | `TRANSCRIBE_FAILED` / screen 13 | API error, 10 min / 32 MB limit, rate limit | Check chunking (≤ 9.5 min chunks); retry from 13; else coach adds remarks by hand. |
-| `AUDIO_DECODE` | Audio track present but unreadable (a clip with **no** audio track is valid and goes to `NO_SPEECH`) | Check `ffprobe` of the source; re-export or re-record with sound on. |
+| `AUDIO_DECODE` | No audio track or unsupported codec | Re-record with sound on; check `ffprobe` of the source. |
 | `NO_SPEECH` / screen 14 | Coach too far from the phone, wind | Advice: keep the phone near the coach, or use the typed remarks path. |
 | `RENDER_FAIL` | ffmpeg error, font, memory | Playback falls back to the live overlay automatically. Read `stageRuns.errorDetail`; re-run with `pnpm jobs:retry <jobId> render`. If render keeps failing: `FEATURE_FFMPEG_RENDER=0` (cut 7). |
 | Student: "wrong code" | Typo, or code copied with spaces | Codes are 6 digits; spaces are stripped. After 5 wrong tries: 15 min lock; wait or create a new link. |
@@ -161,8 +115,6 @@ Compare against the Meta Billing page and the Modal usage page weekly. Target fr
 - [ ] `pnpm runs:sandboxes --open` empty.
 - [ ] `pnpm cost:today` well under `DAILY_SPEND_LIMIT_USD`.
 - [ ] Footage: adults who agreed to be filmed; off-app agreement notes exist (D2); no minors (D3).
-- [ ] No session with `usesTestFixture` on the prod deployment (`pnpm runs:fixture-sessions` prints nothing); `pnpm check:no-fixtures` green.
-- [ ] Hero session uses real coach commentary recorded Sat 31 Oct / Sun 1 Nov.
 - [ ] One fully processed real session ready; demo fallback exported (`pnpm demo:export`) and badge checked.
 - [ ] Student link created; code noted privately; second device ready.
 - [ ] No model names on coach/student screens; footer line visible on 25.
@@ -186,5 +138,6 @@ Compare against the Meta Billing page and the Modal usage page weekly. Target fr
 | Date (SGT) | What happened | Change made |
 |---|---|---|
 | Wed 28 Oct 2026 | Build spec v1 written (SPEC, TASKS, WORKPLAN, DECISIONS, SETUP, RUNBOOK) | — |
-| Wed 28 Oct 2026, 3 PM | Bala: clips have several people, focus on one; no voice yet, commentary this weekend | Spec v1.1: one selected subject (F1, scope reduction), test-only fixture (F2), spike S-2…S-4 rewritten for the selected person, voice checks moved to Sun 1 Nov, "Ready to test now" chunk added |
+| Wed 28 Oct 2026, 3 PM | Bala: clips have several people, focus on one | Spec v1.1: one selected subject (F1, scope reduction), spike S-2…S-4 rewritten for the selected person, "Ready to test now" chunk added. A short-lived "no voice" schedule change (commit 9e65852) was reverted the same afternoon: missing commentary in early clips is a test-data gap, not a product change. |
+| Wed 28 Oct 2026, 3:15 PM | Bala: Codex pushes its own branch and opens PRs to `main` | AGENTS.md rule 13, WORKPLAN, SETUP §9 updated; Bala reviews and merges |
 | | | |

@@ -24,9 +24,8 @@ Dates are 2026, Singapore time (SGT, UTC+8). Today is Wed 28 Oct.
 | D8 | Meta API account, card, credits | Needed for M0; check credit status | SETUP step 1 | before T0.3 | DECISION PENDING (Bala) |
 | MW | Modal workspace name (for the credit request); what if credits don't arrive | Pay-as-you-go if needed; else `SANDBOX_DRIVER=local` (VM runner) | `SANDBOX_DRIVER` | before T0.4 | DECISION PENDING (Bala) |
 | B1 | Remarks not about the selected person (reworded after F1; was "remarks about the bowler in the batter's lesson") | Kept as note-only and left out of the share by default; coach can include one by one on 19 | `params.otherPersonRemarksInShare` | before T1.27 (Sun 1 Nov) | DECISION PENDING (Bala) |
-| F3 | May the test-only fixture files (`fixtures/test-only/`, generic "[TEST]" text, no real people) sit in the public repo? | Yes, clearly labelled; fixtures built from Bala's real clips stay in git-ignored `local-fixtures/` | `fixtures/test-only/README.md` | before the repo is submitted (Wed 4 Nov) | DECISION PENDING (Bala) |
 | F4 | Screen 07a "Pick who to follow" has no wireframe | Build with existing components; send screenshots to Bala (or the designer) at IC2 | SPEC §4 screen 07a | Thu 29 Oct | DECISION PENDING (Bala) |
-| Q-l | Bala's availability for clips, checkpoints and demo | Checkpoints Thu 29, Sat 31 Oct, commentary recording Sat 31 Oct / Sun 1 Nov (T0.8), voice checkpoint Sun 1 Nov, freeze Mon 2 Nov, demo Tue 3 Nov, package to Bala Wed 4 Nov 2 PM | WORKPLAN | — | DECISION PENDING (Bala) |
+| Q-l | Bala's availability for clips, checkpoints and demo | Checkpoints Thu 29, Sat 31 Oct, freeze Mon 2 Nov, demo Tue 3 Nov, package to Bala Wed 4 Nov 2 PM | WORKPLAN | — | DECISION PENDING (Bala) |
 | P2 | Wireframe PNGs in a "new work only" public repo | Copied to `docs/design/` as design references (made 27 Oct ~22:26–22:31 SGT, after kickoff), labelled as containing example text | `docs/design/README.md` | before the repo goes public | DECISION PENDING (Bala) |
 | Q7 | How a coach's transcription correction is shown | "corrected by coach" tag; Hear coach plays the original audio | SPEC §4.3 | — | DECISION PENDING (Bala) |
 
@@ -42,8 +41,8 @@ Dates are 2026, Singapore time (SGT, UTC+8). Today is Wed 28 Oct.
 | 8 swappable stages behind one interface with a `pipeline_config` registry, `stageRuns`, `annotations.provenance` | Bala | SPEC §6 (C-P still asks for formal approval) |
 | "Still frames only" as the fallback name | PROPOSAL R9 | resolves design open question 6 |
 | Daytona out | PROPOSAL cut 1 | |
+| **Branches and PRs for coding agents** (Wed 28 Oct 2026). Codex works on its own feature/lane branch, pushes that branch and opens a PR to `main`; never pushes directly to `main`, never force-pushes `main`, never merges its own PR. Each PR states the TASKS.md IDs it covers and their passing acceptance tests. Bala reviews and merges. | Bala, 28 Oct 2026 | AGENTS.md rule 13; WORKPLAN top; SETUP §9 (branch protection) |
 | **F1 · One person in focus** (Wed 28 Oct 2026). Clips have several people in frame; tracking follows one subject the coach selects by tapping them on a frame (new screen 07a). SAM 3.1 tracks only that person; everyone else is ignored. Batter / bowler / other is a role label on that subject, not two simultaneous tracks. **Scope reduction:** no batter/bowler pairing, no bowler picker on 04, no reassign-to-other-person on 20. | Bala, 28 Oct 2026 | SPEC §0, §4 (04, 07a, 16, 19, 20, 22), §7.4–7.7, §8.3, §22.1 S-2…S-4 (selected person tracked in ≥ 4/5 deliveries/segments, no swap; time and cost thresholds unchanged); supersedes the batter-vs-bowler resolver; B1 reworded |
-| **F2 · No voice until the weekend; test-only fixture** (Wed 28 Oct 2026). Bala's first 2 clips are his own batting without commentary; coach commentary is recorded Sat 31 Oct / Sun 1 Nov. Until then, stages 1–3 and 6 are tested with a test-only remarks fixture (`fixtures/test-only/`, "[TEST]" text) that never ships: not in the demo, screenshots, README, write-up or submission. Voice-dependent checkpoints move to Sun 1 Nov. | Bala, 28 Oct 2026 (fixture rule: spec-level, follows Bala's "no placeholder data in anything shipped") | SPEC §2, §19.1; TASKS T0.7, T0.8, T1.36; WORKPLAN §5, §5.1 (schedule knock-on) |
 
 ## Spec-level choices (not Bala's; change with a note here)
 
@@ -57,4 +56,3 @@ Dates are 2026, Singapore time (SGT, UTC+8). Today is Wed 28 Oct.
 | Subject picked in the browser at upload time from the local file (screen 07a), not after transcode | No sandbox waits for the coach; the job starts as soon as both upload and tap are in |
 | Subject re-found per window by Muse Spark comparing a reference crop with numbered "person" boxes, plus a position prior | SAM object ids are not stable across windows or occlusion; the model still only picks a box number |
 | Per-window tracking kept over whole-video tracking | Whole-video at 15 fps ≈ 9,000 frames ≈ $1.80 per 10-min session, over the $1.50 target (unmeasured; spike may revisit) |
-| Segment mode (per delivery from `deliveries.csv`) as a test path | Lets tracking and render be tested on silent clips with no remarks at all |

@@ -4,7 +4,7 @@ Written Wed 28 Oct 2026 (SGT, UTC+8) for the coding agent (Codex) and for Bala S
 
 > **Capability caveat.** Every Meta model, Modal, Convex, Clerk, R2 and instabox capability below comes from vendor docs and is **UNTESTED** for NetSense until the M0 feasibility spike (TASKS.md `T0.*`). Every timeout, cap and cost figure is an unmeasured default that you tune after the spike. If a vendor API turns out to differ from what is written here, follow the vendor's current docs, keep the contract in this spec, and log the change in RUNBOOK.md "Log / refinements".
 
-> **Revision v1.1 (Wed 28 Oct 2026, 3:05 PM SGT, Bala's input).** (1) **One person in focus:** tracking follows a single subject the coach selects by tapping them on a frame (screen 07a, new). SAM 3.1 tracks that one person; everyone else is ignored. Batter or bowler is a role label on that subject, not two tracks. This is a scope reduction (DECISIONS.md `F1`). (2) **No voice yet:** Bala's first clips have no commentary; coach commentary is recorded Sat 31 Oct / Sun 1 Nov. Until then the transcribe and agent stages are exercised with a **test-only** remarks fixture (§19.1) that must never ship. (3) The aim now is "ready to test": TASKS.md starts with a chunk that needs no paid keys and no voice.
+> **Revision v1.1 (Wed 28 Oct 2026, 3:05 PM SGT, Bala's input).** (1) **One person in focus:** tracking follows a single subject the coach selects by tapping them on a frame (screen 07a, new). SAM 3.1 tracks that one person; everyone else is ignored. Batter or bowler is a role label on that subject, not two tracks. This is a scope reduction (DECISIONS.md `F1`). (2) The aim now is "ready to test": TASKS.md starts with a chunk that needs no paid keys.
 
 > **Pending decisions** are marked `DECISION PENDING (Bala)` with a default. Build the default and keep it configurable. The full list is in DECISIONS.md.
 
@@ -43,8 +43,7 @@ Content rules (apply to UI copy, README, write-up, demo video, commit messages, 
 - Say "coaching-workflow tool that turns the coach's own commentary into marked-up video and notes". Never "AI coach" or "video analyzer"; processing copy says "matching", "follow", "place and check", never "analysing".
 - No untested capability claims. Quote spike numbers where a claim is made. "Still frames only" is always described as a fallback.
 - Model names never appear on coach or student screens (only in the README, write-up, and the dev-only screen 28 if built).
-- No placeholder, fake or example data in anything that ships. Any seed or demo data is real (consented adults) and is labelled on screen as a fallback (§22.4). Test fixtures live under `fixtures/synthetic/` and `fixtures/test-only/` and are never loaded by the production app.
-- **Test-only remarks never ship (rule, v1.1).** The test-only remarks fixture (§19.1) exists only so the transcribe and agent stages can be tested before real coach commentary is recorded. Its text is never shown in the demo video, screenshots, README, write-up or submission, never in a shared lesson, and never presented as coach remarks. Any session that used it is labelled on every coach screen "TEST FIXTURE: not real coach remarks" and cannot be shared or exported as the demo fallback.
+- No placeholder, fake or example data in anything that ships. Any seed or demo data is real (consented adults) and is labelled on screen as a fallback (§22.4). Test fixtures live under `fixtures/synthetic/` and are never loaded by the app.
 - Student pages carry the footer: "These marks show what your coach said. They don't measure your technique."
 - Footage, transcripts, masks and tracks of real people are never committed to the repo.
 
@@ -339,16 +338,15 @@ Output `TranscodeOutput`:
 ```json
 {"proxyKey": "FileRef", "audioWavKeys": [{"key": "FileRef", "offsetMs": 0, "durationMs": 0}],
  "audioM4aKey": "FileRef", "durationMs": 0, "width": 0, "height": 0, "fps": 0.0, "frameCount": 0,
- "keyframeIndexKey": "FileRef", "sha256Verified": true, "hasAudio": true}
+ "keyframeIndexKey": "FileRef", "sha256Verified": true}
 ```
-Steps: download by signed URL; verify byte size and SHA-256 against `uploads` (mismatch → `UPLOAD_CHECKSUM`, back to screen 08); `ffprobe`; proxy `ffmpeg -i src -vf scale=-2:720 -c:v libx264 -preset veryfast -crf 23 -c:a aac -b:a 96k -movflags +faststart proxy.mp4` (also normalises HEVC/WebM input); WAV chunks `ffmpeg -i proxy.mp4 -ac 1 -ar 24000 -c:a pcm_s16le -map_metadata -1` split into ≤9 min 30 s pieces (Voice Transcribe limit is 10 min and 32 MB); `audio.m4a` for Hear coach; key frames as JPEG at 2 fps, 640 px wide, indexed in `keyframes.json` (`[{idx, ms, key}]`). A clip with **no audio stream** is valid (v1.1: early clips have no commentary): output `"hasAudio": false`, empty `audioWavKeys`, no `audio.m4a`; stage 1 then ends `NO_SPEECH` (screen 14) unless the test-only fixture provider is on (§19.1). Errors: `AUDIO_DECODE` (audio stream present but unreadable), `VIDEO_DECODE`, `UPLOAD_CHECKSUM`. Timeout 300 s, retry 1.
+Steps: download by signed URL; verify byte size and SHA-256 against `uploads` (mismatch → `UPLOAD_CHECKSUM`, back to screen 08); `ffprobe`; proxy `ffmpeg -i src -vf scale=-2:720 -c:v libx264 -preset veryfast -crf 23 -c:a aac -b:a 96k -movflags +faststart proxy.mp4` (also normalises HEVC/WebM input); WAV chunks `ffmpeg -i proxy.mp4 -ac 1 -ar 24000 -c:a pcm_s16le -map_metadata -1` split into ≤9 min 30 s pieces (Voice Transcribe limit is 10 min and 32 MB); `audio.m4a` for Hear coach; key frames as JPEG at 2 fps, 640 px wide, indexed in `keyframes.json` (`[{idx, ms, key}]`). Errors: `AUDIO_DECODE` (no audio stream), `VIDEO_DECODE`, `UPLOAD_CHECKSUM`. Timeout 300 s, retry 1.
 
 ### 7.1 Stage 1 · transcribe (model)
 Input `TranscribeInput`:
 ```json
 {"audioWavKeys": [{"key": "FileRef", "offsetMs": 0, "durationMs": 0}],
  "keywords": ["batter", "bowler", "front foot", "back foot", "follow-through", "run-up", "crease", "line", "length"],
- "source": "audio|test_fixture",
  "languageBias": ["English"]}
 ```
 Output `TranscribeOutput`:
@@ -356,7 +354,7 @@ Output `TranscribeOutput`:
 {"turns": [{"turnId": "t001", "startMs": 0, "endMs": 0, "speaker": "string", "text": "string"}],
  "audioDurationMs": 0, "providerSessionIds": ["string"]}
 ```
-Call: `POST {META_API_BASE_URL}/asr/transcribe` multipart, part `request` = `{"mode":"DIARIZATION","model":"muse-voice-transcribe-1.0","audioEncoding":"WAV","keywords":[...],"languageBias":["English"]}`, part `audio` = WAV bytes. Add each chunk's `offsetMs` to its turn times; number `turnId`s in order across chunks. Keywords are spelling hints from config plus the session's student labels (labels only, never contact details). Empty `turns` → status `needs_coach`, `NO_SPEECH` (14). HTTP 400/413 → `AUDIO_DECODE` (no retry); 429 → backoff and retry; 500 → retry once; otherwise `TRANSCRIBE_FAILED` (13). Turn timestamps are turn level only; no word timings are assumed. With `source: "test_fixture"` (test-only provider `fixture`, §19.1) the worker reads turns from a `fixtures/test-only/` file instead of calling the API, and every turn and the session are flagged `testFixture: true`. Persist each turn as a `transcriptTurns` row; `text` is immutable after write (coach corrections go to `correctedText`). Timeout 120 s per chunk, retry 2.
+Call: `POST {META_API_BASE_URL}/asr/transcribe` multipart, part `request` = `{"mode":"DIARIZATION","model":"muse-voice-transcribe-1.0","audioEncoding":"WAV","keywords":[...],"languageBias":["English"]}`, part `audio` = WAV bytes. Add each chunk's `offsetMs` to its turn times; number `turnId`s in order across chunks. Keywords are spelling hints from config plus the session's student labels (labels only, never contact details). Empty `turns` → status `needs_coach`, `NO_SPEECH` (14). HTTP 400/413 → `AUDIO_DECODE` (no retry); 429 → backoff and retry; 500 → retry once; otherwise `TRANSCRIBE_FAILED` (13). Turn timestamps are turn level only; no word timings are assumed. Persist each turn as a `transcriptTurns` row; `text` is immutable after write (coach corrections go to `correctedText`). Timeout 120 s per chunk, retry 2.
 
 ### 7.2 Stage 2 · plan (orchestrator agent)
 Input `PlanInput`:
@@ -445,7 +443,6 @@ Stage output `TrackOutput`:
  "swapSuspected": false, "reassociations": 0}
 ```
 Track file (`tracks/{remarkId}.json`, never in Convex, documents ≤ 1 MiB): `{"fps": 0, "subjectOnly": true, "frames": [{"ms": 0, "box": {...}, "conf": 0.0}], "gaps": [[startMs, endMs]], "swaps": [{"ms": 0, "reason": "jump|reassociated"}]}`. Masks (one-bit, optional) go to `maskRef` for the X8 mask highlight. `coverage` = frames with a box ÷ frames in the moment. Cache key = `sha256(proxySha256 | window | prompt | downsampleFps)`; on hit, reuse the file and bill 0 frames. Frame cap: before the call, check `budget.samFrames + windowFrames ≤ JOB_SAM_FRAME_CAP` (§18); else `BUDGET_SAM_FRAMES`. Errors: HTTP 400 → `SEG_BAD_INPUT` (no retry); empty track → `SEG_NO_TRACK`. Timeout 180 s per window, retry 1.
-**Segment mode (no-voice testing, v1.1):** with `TRACK_SEGMENTS_FROM` set to a segments file (`[{segmentId, startMs, endMs}]`, e.g. made from the spike's `deliveries.csv`), the runner runs stages 4b–5 per segment instead of per remark, so tracking, render and the sandbox lifecycle can be tested on silent clips. Segment mode is a test path; it never shares a lesson.
 
 ### 7.6 Stage 6 · place (sub-agent, per remark)
 Input `PlaceInput`:
@@ -592,13 +589,13 @@ Document limit is 1 MiB: tracks, masks, key frames and renders live in storage; 
 |---|---|---|
 | `coaches` | `clerkUserId`, `displayName`, `createdAt` | `by_clerkUserId` |
 | `students` | `coachId`, `label` (first name or nickname), `contactMasked?` (e.g. `+65 •••• 21`, optional), `createdAt` | `by_coachId` |
-| `sessions` | `coachId`, `studentId: v.id("students")` (who the lesson is for), `subjectRole: "batter"\|"bowler"\|"other"`, `subject?: Subject` (§7 common types; tapped on 07a), `subjectStatus: "needed"\|"set"\|"anchored"\|"anchor_failed"`, `subjectAnchor?: {box, frameMs, referenceCropKey}`, `usesTestFixture: boolean` (§19.1; default false), `captureMode: "camera"\|"camera_roll"\|"in_page"`, `renderMode: "video"\|"stills"`, `isDemoFallback: boolean` (§22.4), `status: "draft"\|"uploading"\|"processing"\|"needs_you"\|"review_ready"\|"shared"\|"failed"`, `latestJobId?`, `durationMs?`, `createdAt` | `by_coachId_createdAt` |
+| `sessions` | `coachId`, `studentId: v.id("students")` (who the lesson is for), `subjectRole: "batter"\|"bowler"\|"other"`, `subject?: Subject` (§7 common types; tapped on 07a), `subjectStatus: "needed"\|"set"\|"anchored"\|"anchor_failed"`, `subjectAnchor?: {box, frameMs, referenceCropKey}`, `captureMode: "camera"\|"camera_roll"\|"in_page"`, `renderMode: "video"\|"stills"`, `isDemoFallback: boolean` (§22.4), `status: "draft"\|"uploading"\|"processing"\|"needs_you"\|"review_ready"\|"shared"\|"failed"`, `latestJobId?`, `durationMs?`, `createdAt` | `by_coachId_createdAt` |
 | `uploads` | `sessionId`, `coachId`, `storageKey`, `driver: "r2"\|"local"`, `multipartUploadId?`, `mimeType`, `bytesTotal`, `bytesConfirmed`, `partSize`, `partsConfirmed: number[]`, `sha256`, `status: "in_progress"\|"paused"\|"complete"\|"failed"\|"aborted"`, `attempts`, `createdAt`, `completedAt?` | `by_sessionId` |
 | `pipeline_config` | `version`, `active: boolean`, `stages: StageConfig[]` (§17), `coachStages`, `limits`, `createdAt`, `note` | `by_version`, `by_active` |
 | `jobs` | `sessionId`, `coachId`, `kind: "pipeline"\|"subject_retrack"\|"remark_retrack"\|"stage_retry"\|"finalize"`, `remarkId?`, `stage?`, `configVersion` (pinned at creation), `status: "queued"\|"running"\|"done"\|"failed"\|"waiting_for_coach"\|"cancelled"`, `coachStage`, `progress?`, `progressLabel?`, `errorCode?`, `attempt`, `maxAttempts`, `leaseOwner?`, `leaseUntil?`, `heartbeatAt?`, `sandboxId?`, `sandboxName?`, `lastStageDone?`, `samFrames`, `inputTokens`, `outputTokens`, `costUsd`, `createdAt`, `startedAt?`, `endedAt?` | `by_status_createdAt`, `by_sessionId` |
 | `sandboxes` | `jobId`, `sandboxId`, `sandboxName`, `driver: "modal"\|"local"`, `createdAt`, `terminatedAt?`, `terminatedBy?: "orchestrator"\|"sweeper"\|"timeout"\|"self"`, `exitCode?` | `by_jobId`, `by_terminatedAt` |
 | `stageRuns` | `jobId`, `sessionId`, `stage`, `remarkId?`, `workerId`, `workerType`, `provider`, `modelVersion?`, `promptHash?`, `candidate?`, `attempt`, `idempotencyKey`, `status: "queued"\|"running"\|"done"\|"failed"\|"skipped"\|"fallback"\|"needs_coach"`, `errorCode?`, `errorDetail?` (≤ 500 chars, no transcript text), `inputHash`, `outputRef?` (storage key or table id), `startedAt?`, `endedAt?`, `latencyMs?`, `samFrames?`, `inputTokens?`, `outputTokens?`, `costUsd?` | `by_jobId_stage`, `by_jobId_remarkId`, `by_idempotencyKey` |
-| `transcriptTurns` | `sessionId`, `turnId`, `startMs`, `endMs`, `speaker`, `text` (immutable), `testFixture: boolean` (§19.1), `correctedText?`, `correctedAt?` | `by_sessionId_turnId` |
+| `transcriptTurns` | `sessionId`, `turnId`, `startMs`, `endMs`, `speaker`, `text` (immutable), `correctedText?`, `correctedAt?` | `by_sessionId_turnId` |
 | `remarks` | `sessionId`, `remarkId`, `turnIds: string[]`, `source: "voice"\|"typed"`, `aboutSubject: "yes"\|"no"\|"unclear"\|"general"`, `kind`, `atMs`, `mode: "tracked"\|"still_frame"\|"note_only"`, `momentStartMs?`, `momentEndMs?`, `keyframeMs?`, `momentWhy?`, `status: "pending"\|"ok"\|"player_missing"\|"needs_coach"`, `includeInShare: boolean` | `by_sessionId` |
 | `annotations` | `sessionId`, `remarkId`, `markId`, `markType`, `anchor`, `arrowFrom?`, `role`, `startMs`, `endMs`, `labelSpan?`, `labelText`, `neutralLabel?`, `trackId?`, `why`, `status: "needs_you"\|"approved"\|"deleted"\|"player_missing"`, `placedBy: "ai"\|"coach"`, `aiPlacement?` (original AI values, for the dashed range on 20), `checkVerdict?`, `provenance: Provenance` (§7), `approvedAt?`, `updatedAt` | `by_sessionId_status`, `by_remarkId` |
 | `tracks` | `sessionId`, `remarkId`, `trackId`, `role`, `mode`, `fileRef`, `maskRef?`, `coverage`, `cacheKey` | `by_sessionId`, `by_cacheKey` |
@@ -880,21 +877,11 @@ Rate limits (Spark 3,000 RPM, SAM 3,000 RPM, Voice Transcribe 256 concurrent) ar
 | Convex | `convex-test` + vitest | ownership checks; claim is atomic; `share.create` snapshots approved items only; lockout; no bulk approve mutation exists | no |
 | Web | vitest + Testing Library | coach vs AI visual states, upload resume logic | no |
 | Subject | pytest + vitest | 07a tap → `sessions.subject` (normalised point); job gating (upload complete + subject set, either order, enqueues exactly once); anchor picks the mask containing the tap; re-id maps `boxNumber` → box and 0 → `SUBJECT_NOT_FOUND`; swap guard flags a synthetic jump and a re-association; only the subject's object id is kept when the fake SAM stream contains 3 people | no |
-| Fixture guard | pytest + vitest + CI script | `fixture` provider refuses unless `NETSENSE_ENV != "prod"` and `TEST_FIXTURES_ENABLED=1`; sessions get `usesTestFixture`; `share.create` and demo export refuse them in prod; `scripts/check-no-fixtures.ts` fails if the production web bundle or runner image contains `fixtures/test-only` or `[TEST]` strings | no |
 | E2E | Playwright, `SANDBOX_DRIVER=local`, `provider=fake`, `STORAGE_DRIVER=local` | sign in (Clerk testing token) → new session → upload synthetic clip → tap the subject on 07a (`fixtures/synthetic/`, generated by `scripts/make-synthetic-clip.sh`: ffmpeg test pattern + TTS-free sine audio, clearly synthetic) → status → review approve → share → student code → lesson | Clerk test keys only |
 | Live smoke | `pnpm smoke:live` | one real clip through the real pipeline on Modal + Meta; asserts stageRuns, sandbox released, cost under cap | **real keys + real clip (human)** |
 
-CI (`.github/workflows/ci.yml`): lint, typecheck, unit, contracts, convex-test, E2E with fake provider, fixture guard, gitleaks. No secrets in CI.
+CI (`.github/workflows/ci.yml`): lint, typecheck, unit, contracts, convex-test, E2E with fake provider, gitleaks. No secrets in CI. Agents run it on their lane branch and PR (AGENTS.md rule 13).
 
-### 19.1 Testing before voice exists (test-only remarks fixture)
-
-Bala's first clips have no commentary (recording planned Sat 31 Oct / Sun 1 Nov). To test stages 1–8 on real video before then:
-- **What it is:** a transcribe provider `fixture` (`transcribe.fixture@1`, `workerType: "tool"`) that returns `TranscribeOutput` read from a JSON file instead of calling Muse Voice Transcribe. Stages 2–7 then run normally (real Muse Spark with keys, or `fake` without) on those turns.
-- **Where the files live:** `fixtures/test-only/` (committed: README, schema-valid template, the fixture for the synthetic clip, generator notes). Fixtures for Bala's real clips are generated locally by `scripts/make-test-remarks.ts --from spike/clips/deliveries.csv` into git-ignored `local-fixtures/` (they carry real timings of a real person, so they are not committed).
-- **What the text says:** every turn is `"[TEST] remark about delivery {n}: {phrase}"`, where `{phrase}` comes from a short fixed list in the generator ("front foot", "head position", "follow-through", …) so stages 2–6 have body-area words to work with. The `[TEST]` prefix is part of the text and so is carried verbatim into every label. Speaker is `"TEST_COACH"`.
-- **Guards (all enforced in code and tested):** (1) the provider only loads when `NETSENSE_ENV != "prod"` and `TEST_FIXTURES_ENABLED=1`; (2) it sets `sessions.usesTestFixture = true` and `transcriptTurns.testFixture = true`; (3) every coach screen for such a session shows a red banner "TEST FIXTURE: not real coach remarks"; (4) `share.create` refuses when `NETSENSE_ENV = "prod"` and in all environments shows the banner on the student pages; (5) `scripts/demo-export.ts` (`pnpm demo:export`) refuses such sessions; (6) CI `check-no-fixtures` (above).
-- **Rule:** never ships. Not in the demo video, screenshots, README, write-up or submission. Delete test-fixture sessions from the prod deployment before recording the demo (RUNBOOK §3.3).
-- **Silent-clip path without any remarks:** segment mode (§7.5) runs stages 4b–5 and render per delivery segment from `deliveries.csv`; this is how tracking and render are tested on real silent clips with no fixture at all.
 
 ## 20. Contradictions between PROPOSAL R10 and the design README, and how this spec resolves them
 
@@ -926,7 +913,7 @@ Bala's first clips have no commentary (recording planned Sat 31 Oct / Sun 1 Nov)
 | 0:00–0:10 | Opening line: what existed before (idea, design) vs built this week; names Muse Voice Transcribe, Muse Spark, SAM 3.1 | README "Built during the Hackathon" text |
 | 0:10–0:30 | Capture: camera app, upload with resume | 06, 07 on a phone; a real clip |
 | 0:30–0:55 | Pipeline: tap the player on 07a, screen 12 rows, then stageRuns (CLI `runs:show` or Convex dashboard; screen 28 only if X5 built) | real job with stageRuns |
-| 0:55–1:45 | Hero: annotated playback, coach's words on the one selected player at the right moment (other people in the net ignored), Hear coach | 17 with a good real session **with real coach commentary** (recorded Sat 31 Oct / Sun 1 Nov); preview render. Never a test-fixture session (§19.1). |
+| 0:55–1:45 | Hero: annotated playback, coach's words on the one selected player at the right moment (other people in the net ignored), Hear coach | 17 with a good real session; preview render |
 | 1:45–2:15 | Review: approve, move, AI suggestion approve/dismiss; no bulk approve | 19, 20, 21 |
 | 2:15–2:40 | Student link: code, lesson, footer line | 22–25 on a second device |
 | 2:40–3:00 | Focus card + next-session focus; close | 26, 23 |
@@ -935,8 +922,8 @@ Footage: adults who agreed to be filmed only (D2/D3), recorded off-app. Screen r
 
 ## 22. Scope
 
-### 22.1 M0 (task 0): feasibility spike, video part due Wed 28 Oct 2026 11:59 PM SGT; voice part Sun 1 Nov
-2–3 real net clips, ≥ 5 deliveries (or segments) each, adults who agreed to be filmed, **several people in frame**. Bala's first 2 clips are his own batting with **no commentary**, so S-1…S-7 run on silent video with a selected subject; the Voice Transcribe check moves to the weekend (T0.7). For each clip, `deliveries.csv` records the subject tap (`subjectFrameMs, subjectX, subjectY`) chosen once by Bala. Go/no-go thresholds:
+### 22.1 M0 (task 0): feasibility spike, due Wed 28 Oct 2026 11:59 PM SGT
+2–3 real net clips, ≥ 5 deliveries (or segments) each, adults who agreed to be filmed, **several people in frame**. For each clip, `deliveries.csv` records the subject tap (`subjectFrameMs, subjectX, subjectY`) chosen once by Bala. Go/no-go thresholds:
 
 | # | Question | Go if |
 |---|---|---|
@@ -948,7 +935,7 @@ Footage: adults who agreed to be filmed only (D2/D3), recorded off-app. Screen r
 | S-6 | Cost | Billed frames match $0.20/1k; ≤ ~$1.50 per session |
 | S-7 | Output handling | Stream parses; per-clip output size manageable |
 
-Optional measurement: whole-video tracking (one SAM request seeded on the tap frame) vs per-window; a 10-min session at 15 fps is ~9,000 frames ≈ $1.80, over the S-6 target, so per-window stays the default unless S-3 fails per window. **Deferred to the weekend (T0.7, Sun 1 Nov):** Voice Transcribe go/no-go (turns usable, coach speaker separable, timing within ~1 s of speech) on Bala's commentary clips. Now: Modal sandbox smoke (create, run ffmpeg, terminate, list by tag). Outcomes: **Go** → tracked video (`renderModeDefault: "video"`). **Partial** (only S-1 and S-2 met) → **Still frames only** (`renderModeDefault: "stills"`, `FORCE_STILLS` on). **No-go** → fallback (stills or note-only) and tell Bala by Thu 29 Oct morning. A swap failure on S-3 alone → keep video but ship with `SUBJECT_SWAP` sending affected remarks to 16 and shorter windows (`trackPadMs` down). Results in `docs/spike/sam-spike.md`.
+Optional measurement: whole-video tracking (one SAM request seeded on the tap frame) vs per-window; a 10-min session at 15 fps is ~9,000 frames ≈ $1.80, over the S-6 target, so per-window stays the default unless S-3 fails per window. Plus: Voice Transcribe go/no-go (turns usable, coach speaker separable, timing within ~1 s of speech), and Modal sandbox smoke (create, run ffmpeg, terminate, list by tag). Outcomes: **Go** → tracked video (`renderModeDefault: "video"`). **Partial** (only S-1 and S-2 met) → **Still frames only** (`renderModeDefault: "stills"`, `FORCE_STILLS` on). **No-go** → fallback (stills or note-only) and tell Bala by Thu 29 Oct morning. A swap failure on S-3 alone → keep video but ship with `SUBJECT_SWAP` sending affected remarks to 16 and shorter windows (`trackPadMs` down). Results in `docs/spike/sam-spike.md`.
 
 ### 22.2 M1: minimum version
 Everything in §4 except 09–11 and 28 and Re-place; all 8 stages with one default worker each; transcode; fan-out; stageRuns; provenance; pinned config; screen fallbacks (13, 14, 15/18, 16, live overlay); preview render before review; final render after approval in a fresh sandbox; link + code; focus card; next-session focus; observability CLI; cost guards; deploy to the VM; demo fallback.
