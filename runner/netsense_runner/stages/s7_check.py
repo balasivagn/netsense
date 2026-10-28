@@ -37,10 +37,12 @@ class CheckRulesWorker:
         track_file_loader: TrackFileLoader,
         config: CheckerConfig | None = None,
         subject_role: SubjectRole | None = None,
+        remark_number: int | None = None,
     ) -> None:
         self._track_file_loader = track_file_loader
         self._config = config or CheckerConfig()
         self._subject_role = subject_role
+        self._remark_number = remark_number
 
     def run(self, input_value: Mapping[str, JsonValue], ctx: StageContext) -> StageResult:
         try:
@@ -49,7 +51,9 @@ class CheckRulesWorker:
             return _failure("CONTRACT_INVALID")
         try:
             track = _load_track(self._track_file_loader, check_input.trackFileRef)
-            output = check_marks(check_input, track, self._config, self._subject_role)
+            output = check_marks(
+                check_input, track, self._config, self._subject_role, self._remark_number
+            )
         except Exception:  # Loader and contract boundaries must not expose raw inputs.
             return _failure("SEG_BAD_INPUT")
         output_value = cast(dict[str, JsonValue], output.model_dump(by_alias=True))

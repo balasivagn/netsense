@@ -267,3 +267,18 @@ def test_checker_conforms_to_registry_worker_protocol() -> None:
     assert result["status"] == "done"
     with pytest.raises(ValueError, match="CHECKER_CONFIG_INVALID"):
         CheckerConfig(min_mark_coverage=True)
+
+
+@pytest.mark.parametrize("remark_number", [None, 0, True, 2, 3])
+def test_numbered_neutral_label_requires_the_actual_remark_number(
+    remark_number: int | None,
+) -> None:
+    input_data, track_data = _input(), _track()
+    _mark(input_data).update({"labelSpan": None, "neutralLabel": "Remark", "labelText": "Remark 3"})
+    worker = CheckRulesWorker(
+        lambda _ref: json.dumps(track_data).encode(), remark_number=remark_number
+    )
+    result = worker.run(cast(dict[str, JsonValue], input_data), cast(StageContext, object()))
+    assert result["output"] is not None
+    verdicts = cast(list[dict[str, JsonValue]], result["output"]["verdicts"])
+    assert verdicts[0]["reason"] == ("ok" if remark_number == 3 else "label_mismatch")

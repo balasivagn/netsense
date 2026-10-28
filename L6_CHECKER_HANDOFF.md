@@ -22,6 +22,12 @@ role when it has it.  `CheckerConfig` is constructor-injected, has defaults
 `min_mark_coverage=0.6` and `label_max_utf16_units=60`, and has no environment
 override.
 
+SPEC §7.6 also allows the neutral label `Remark {n}`. For that label the runner
+must supply `remark_number` (positive integer, matching the same ordinal used
+by placement) to `CheckRulesWorker` / `check_marks`. Missing or inconsistent
+ordinals fail `label_mismatch`; neither role nor ordinal is inferred from model
+text. This constructor input leaves the frozen CheckInput schema unchanged.
+
 The loader bytes are UTF-8 decoded and validated with `validate_contract` as a
 `TrackFile`; malformed tracks, non-`subjectOnly` input, reversed/zero-area or
 non-finite boxes, invalid gaps, and duplicate transcript turn IDs are rejected
