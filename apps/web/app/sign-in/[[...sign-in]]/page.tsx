@@ -1,4 +1,5 @@
 import { SignIn } from "@clerk/nextjs";
+import { ConnectionNotice } from "../connection-notice";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,7 @@ function SignInUnavailable() {
       <p className="sign-in__brand">NetSense</p>
       <h1 id="coach-sign-in-title">Coach sign-in</h1>
       <p className="sign-in__offline" role="alert">
-        No connection, try again
+        Coach sign-in is not configured.
       </p>
       <p className="sign-in__notice">
         <strong>Coaches only.</strong> Students never sign in. They open a
@@ -21,6 +22,7 @@ function SignInUnavailable() {
 export default function SignInPage() {
   if (
     !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+    !process.env.CLERK_SECRET_KEY ||
     !process.env.NEXT_PUBLIC_CONVEX_URL
   ) {
     return <SignInUnavailable />;
@@ -34,6 +36,7 @@ export default function SignInPage() {
         Turn what you say at the nets into marked video your students can
         revisit. You review everything before it’s shared.
       </p>
+      <ConnectionNotice />
       <SignIn fallbackRedirectUrl="/sessions" />
       <p className="sign-in__notice">
         <strong>Coaches only.</strong> Students never sign in. They open a

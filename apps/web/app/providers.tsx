@@ -38,6 +38,12 @@ function CoachBootstrap({ children }: { children: ReactNode }) {
   const { isLoading, isAuthenticated } = useConvexAuth();
   const ensureCoach = useMutation(api.coaches.ensure);
   const [state, setState] = useState<CoachProvisioningState>("loading");
+  const currentPlan = coachProvisioningPlan({
+    clerkLoaded: isLoaded,
+    convexLoading: isLoading,
+    clerkUserId: userId ?? null,
+    convexAuthenticated: isAuthenticated,
+  });
 
   useEffect(() => {
     let active = true;
@@ -81,24 +87,47 @@ function CoachBootstrap({ children }: { children: ReactNode }) {
   }, [ensureCoach, isAuthenticated, isLoaded, isLoading, userId]);
 
   return (
-    <CoachProvisioningContext.Provider value={state}>
+    <CoachProvisioningContext.Provider value={currentPlan === "provision" ? state : currentPlan === "wait" ? "loading" : "unavailable"}>
       {children}
     </CoachProvisioningContext.Provider>
   );
 }
 
-export function AppProviders({ children }: { children: ReactNode }) {
+function SessionProviders({ children }: { children: ReactNode }) {
   const convex = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_CONVEX_URL;
     if (!url) throw new Error("Missing NEXT_PUBLIC_CONVEX_URL");
-    return new ConvexReactClient(url);
+    return { client: new ConvexReactClient(url), mounted: false, closed: false };
   }, []);
 
+  useEffect(() => {
+    convex.mounted = true;
+    return () => {
+      convex.mounted = false;
+      // Strict Mode replays setup/cleanup. Close only after a real unmount,
+      // so replay cannot close the live client's connection.
+      queueMicrotask(() => {
+        if (!convex.mounted && !convex.closed) {
+          convex.closed = true;
+          void convex.client.close();
+        }
+      });
+    };
+  }, [convex]);
+
   return (
-    <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+    <ConvexProviderWithClerk client={convex.client} useAuth={useAuth}>
       <CoachBootstrap>{children}</CoachBootstrap>
     </ConvexProviderWithClerk>
   );
+}
+
+export function AppProviders({ children }: { children: ReactNode }) {
+  const { userId, sessionId } = useAuth();
+  // A fresh provider starts unauthenticated. Old mutation completions, query
+  // cache and auth confirmations cannot carry across an account/session switch.
+  const identity = JSON.stringify([userId ?? null, sessionId ?? null]);
+  return <SessionProviders key={identity}>{children}</SessionProviders>;
 }
 
 export function CoachProvisioningGate({ children }: { children: ReactNode }) {

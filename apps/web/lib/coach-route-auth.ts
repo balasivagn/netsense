@@ -9,10 +9,14 @@ export async function getCoachRouteAuth(): Promise<{
   clerkUserId: string;
   convexToken: string;
 } | null> {
-  const { userId, getToken } = await auth();
+  const { userId, getToken, sessionClaims } = await auth();
   if (!userId) return null;
 
-  const convexToken = await getToken({ template: "convex" });
+  // Match the installed ConvexProviderWithClerk: native integration tokens
+  // already carry the convex audience; legacy setups use the named template.
+  const convexToken = await getToken(
+    sessionClaims?.aud === "convex" ? {} : { template: "convex" },
+  );
   if (!convexToken) return null;
 
   return { clerkUserId: userId, convexToken };

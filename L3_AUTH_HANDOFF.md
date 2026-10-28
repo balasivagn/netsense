@@ -5,7 +5,7 @@
 - Next 16.4.3 `proxy.ts` protects `/sessions/**` and early-filters future coach browser APIs: `/api/uploads/**` and `/api/media/sign/**`.
 - It intentionally does **not** protect `/api/worker/sign`, `/api/media/local/**`, `/l/**`, or `/api/l/**` because those use worker tokens, signed URLs, or student-link access instead.
 - `app/sessions/layout.tsx` performs its own Clerk server check and only renders children after the Convex-authenticated identity has provisioned `coaches.ensure`.
-- `AppProviders` uses `ClerkProvider`, `ConvexProviderWithClerk`, `useAuth`, and a `ConvexReactClient`. Bootstrap runs only after `useConvexAuth()` reports an authenticated Convex identity. It is one attempt per current user/session identity, fails closed, and starts fresh after an account change.
+- `AppProviders` uses `ClerkProvider`, `ConvexProviderWithClerk`, `useAuth`, and a `ConvexReactClient`. Bootstrap runs only after `useConvexAuth()` reports an authenticated Convex identity. Provisioning is idempotent, fails closed, and starts fresh after an account or Clerk-session change. React Strict Mode may replay provisioning; the mutation already deduplicates coach rows.
 - `convex/auth.config.ts` configures Clerk’s issuer with the `convex` application ID. Existing Convex functions keep server-enforced coach ownership through `requireCoach`/`ownedSession`.
 
 ## Future coach route handlers
@@ -25,3 +25,25 @@ SETUP steps 2–3 must supply `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET
 Official references: [Convex + Clerk](https://docs.convex.dev/auth/clerk), [Convex auth config](https://docs.convex.dev/config/auth.config.ts), [Clerk Next.js auth](https://clerk.com/docs/reference/nextjs/app-router/auth), [Clerk route handlers](https://clerk.com/docs/reference/nextjs/app-router/route-handlers).
 
 Real Clerk browser E2E is **UNTESTED** until those credentials and a Clerk testing-token setup are available.
+
+## Parent review and validation
+
+Each Clerk user/session pair now owns a fresh Convex provider/client and bootstrap
+state. Old clients close after unmount (including safe Strict Mode replay), and
+late provisioning completion cannot unlock a different account. Loading/logout
+gates apply during render, before effects run.
+
+The server helper follows the installed Convex SDK: native integration sessions
+with the convex audience use the session token; legacy setups request the convex
+JWT template. Proxy and ClerkProvider explicitly use /sign-in. Worker signing,
+local media and student API requests bypass Clerk processing, preserving their
+independent authorization. Missing configuration is reported as unconfigured;
+the offline notice now follows actual browser connectivity.
+
+Validation: full pnpm check PASS — 317 JS tests, 280 runner tests, 33 orchestrator
+tests, lint, strict typechecks, contract drift and offline bindings. Production
+web build, secret scan and diff check PASS; actual commit hook runs before push.
+New component regressions exercise identity/session switches, logout, late
+promises, failures and Strict Mode cleanup; route tests cover token modes and
+proxy bypass/protection. These are local tests, not proof of real Clerk login.
+Real auth/deployment/browser E2E remains UNTESTED pending development config.

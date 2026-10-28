@@ -6,13 +6,14 @@ export const metadata = { title: "NetSense", description: "Coaching workflow" };
 export default function Layout({ children }: { children: ReactNode }) {
   const configured = Boolean(
     process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
+    process.env.CLERK_SECRET_KEY &&
     process.env.NEXT_PUBLIC_CONVEX_URL,
   );
   return (
     <html lang="en">
       <body>
         {configured ? (
-          <ClerkProvider>
+          <ClerkProvider signInUrl="/sign-in">
             <AppProviders>{children}</AppProviders>
           </ClerkProvider>
         ) : (

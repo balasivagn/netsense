@@ -1,5 +1,5 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest, type NextFetchEvent } from "next/server";
 import { isCoachApiPath, isCoachPagePath } from "./lib/auth-routes";
 
 const hasClerkConfiguration = Boolean(
@@ -13,7 +13,7 @@ const configuredProxy = clerkMiddleware(async (auth, request) => {
   ) {
     await auth.protect();
   }
-});
+}, { signInUrl: "/sign-in" });
 
 function unconfiguredProxy(request: NextRequest) {
   if (isCoachPagePath(request.nextUrl.pathname)) {
@@ -25,10 +25,20 @@ function unconfiguredProxy(request: NextRequest) {
   return NextResponse.next();
 }
 
-export default hasClerkConfiguration ? configuredProxy : unconfiguredProxy;
+export default function proxy(request: NextRequest, event: NextFetchEvent) {
+  // These handlers implement their own HMAC or student-link authorization.
+  // Clerk must never interpret their bearer tokens as coach sessions.
+  const pathname = request.nextUrl.pathname;
+  if (pathname === "/api/worker/sign" || pathname.startsWith("/api/media/local/") ||
+      pathname === "/api/l" || pathname.startsWith("/api/l/")) {
+    return NextResponse.next();
+  }
+  return hasClerkConfiguration ? configuredProxy(request, event) : unconfiguredProxy(request);
+}
 
 export const config = {
   matcher: [
+    "/api/:path*",
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
   ],
 };
