@@ -1,0 +1,20 @@
+{
+  "remarkId": "remark-synthetic",
+  "marks": [
+    {
+      "markId": "mark-synthetic",
+      "markType": "circle",
+      "anchor": "box_center",
+      "arrowFrom": null,
+      "startMs": 0,
+      "endMs": 1000,
+      "labelSpan": {"turnId": "turn-synthetic", "start": 0, "end": 4},
+      "labelText": "Keep",
+      "neutralLabel": null
+    }
+  ],
+  "trackFileRef": "synthetic-track",
+  "transcriptTurns": [{"turnId": "turn-synthetic", "text": "Keep steady"}],
+  "momentStartMs": 0,
+  "momentEndMs": 1000
+}
