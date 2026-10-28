@@ -8,14 +8,14 @@ from __future__ import annotations
 
 import json
 import math
-import socket
+import re
+import subprocess
+import sys
 import time
 from dataclasses import dataclass
-from email.message import Message
-from typing import IO, Literal, Protocol, TypeVar
-from urllib.error import HTTPError, URLError
+from pathlib import Path
+from typing import Literal, TypeVar
 from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from pydantic import BaseModel, ValidationError
 
@@ -44,9 +44,7 @@ from .worker_wire import (
     WorkerJobResponse,
 )
 
-_MAX_RESPONSE_BYTES = 32_768
-_PERSIST_RESPONSE_BYTES = 32_768
-_READ_CHUNK_BYTES = 8_192
+_MAX_RESPONSE_BYTES = 1_048_576
 _HEX64 = set("0123456789abcdef")
 _T = TypeVar("_T", bound=BaseModel)
 TerminalStageStatus = Literal["done", "failed", "fallback", "skipped", "needs_coach"]
@@ -61,25 +59,6 @@ class WorkerClientError(Exception):
         self.code = code
 
 
-class _NoRedirect(HTTPRedirectHandler):
-    def redirect_request(
-        self,
-        request: Request,
-        fp: IO[bytes],
-        code: int,
-        msg: str,
-        headers: Message,
-        newurl: str,
-    ) -> Request | None:
-        raise WorkerClientError("REDIRECT_REJECTED")
-
-
-class _ReadableResponse(Protocol):
-    status: int
-
-    def read(self, amount: int = -1) -> bytes: ...
-
-
 @dataclass(frozen=True)
 class ConvexWorkerClient:
     """Thread-safe per-job client. Each call has independent transport state."""
@@ -90,28 +69,55 @@ class ConvexWorkerClient:
     max_response_bytes: int = _MAX_RESPONSE_BYTES
 
     def __post_init__(self) -> None:
-        parsed = urlsplit(self.runtime_site_url)
+        try:
+            if not isinstance(self.runtime_site_url, str) or any(
+                char.isspace() or ord(char) < 33 or ord(char) > 126
+                for char in self.runtime_site_url
+            ):
+                raise ValueError
+            parsed = urlsplit(self.runtime_site_url)
+            if (
+                parsed.scheme not in {"http", "https"}
+                or not parsed.hostname
+                or not re.fullmatch(
+                    r"(?:\[[0-9a-fA-F:.]+\]|[a-zA-Z0-9][a-zA-Z0-9.-]*)(?::[0-9]+)?",
+                    parsed.netloc,
+                )
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.query or parsed.fragment
+                or "?" in self.runtime_site_url or "#" in self.runtime_site_url
+                or parsed.path not in {"", "/"}
+                or "\\" in parsed.netloc
+                or parsed.netloc.endswith(":")
+                or (parsed.port is not None and not 0 < parsed.port <= 65535)
+            ):
+                raise ValueError
+        except (ValueError, TypeError):
+            raise ValueError("INVALID_ORIGIN") from None
+        try:
+            if isinstance(self.timeout_s, bool) or not isinstance(self.timeout_s, (int, float)):
+                raise ValueError
+            timeout = float(self.timeout_s)
+            if not math.isfinite(timeout) or timeout <= 0:
+                raise ValueError
+        except (ValueError, TypeError, OverflowError):
+            raise ValueError("INVALID_TIMEOUT") from None
+        object.__setattr__(self, "timeout_s", timeout)
         if (
-            parsed.scheme not in {"http", "https"}
-            or not parsed.netloc
-            or parsed.username is not None
-            or parsed.password is not None
-            or parsed.query
-            or parsed.fragment
-            or parsed.path not in {"", "/"}
+            type(self.max_response_bytes) is not int
+            or not 0 < self.max_response_bytes <= _MAX_RESPONSE_BYTES
         ):
-            raise ValueError("INVALID_ORIGIN")
-        if not math.isfinite(self.timeout_s) or self.timeout_s <= 0:
-            raise ValueError("INVALID_TIMEOUT")
-        if self.max_response_bytes <= 0:
             raise ValueError("INVALID_RESPONSE_LIMIT")
+        if (
+            not isinstance(self.job_token, str) or not self.job_token
+            or any(ord(char) < 33 or ord(char) > 126 for char in self.job_token)
+        ):
+            raise ValueError("INVALID_TOKEN")
         object.__setattr__(self, "runtime_site_url", f"{parsed.scheme}://{parsed.netloc}")
 
     def __repr__(self) -> str:
-        return (
-            "ConvexWorkerClient("
-            f"runtime_site_url={self.runtime_site_url!r}, timeout_s={self.timeout_s!r})"
-        )
+        return "ConvexWorkerClient()"
 
     def get_job(self) -> WorkerJobResponse:
         response = self._request("GET", "/worker/job", None, WorkerJobResponse)
@@ -208,7 +214,10 @@ class ConvexWorkerClient:
         self._persist("target", stage_run_id, output, contract)
 
     def persist_track(self, stage_run_id: str, output: TrackOutput, *, cache_key: str) -> None:
-        if len(cache_key) != 64 or any(char not in _HEX64 for char in cache_key):
+        if (
+            not isinstance(cache_key, str) or len(cache_key) != 64
+            or any(char not in _HEX64 for char in cache_key)
+        ):
             raise WorkerClientError("CONTRACT_INVALID")
         self._persist("track", stage_run_id, output, "TrackOutput", {"cacheKey": cache_key})
 
@@ -270,14 +279,16 @@ class ConvexWorkerClient:
     def _validate_contract(contract: str, value: dict[str, JsonValue]) -> None:
         try:
             validate_contract(contract, json.dumps(value, allow_nan=False, separators=(",", ":")))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, RecursionError):
             raise WorkerClientError("CONTRACT_INVALID") from None
 
     @staticmethod
     def _model_json(model: BaseModel) -> dict[str, JsonValue]:
+        if not isinstance(model, BaseModel):
+            raise WorkerClientError("CONTRACT_INVALID")
         try:
             value = _json_value(model.model_dump(mode="python", by_alias=True, warnings=False))
-        except (json.JSONDecodeError, ValueError):
+        except (TypeError, ValueError, RecursionError):
             raise WorkerClientError("CONTRACT_INVALID") from None
         if not isinstance(value, dict):
             raise WorkerClientError("CONTRACT_INVALID")
@@ -305,51 +316,55 @@ class ConvexWorkerClient:
         if payload is not None:
             try:
                 body = json.dumps(payload, allow_nan=False, separators=(",", ":")).encode("utf-8")
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, RecursionError):
                 raise WorkerClientError("CONTRACT_INVALID") from None
-        request = Request(
-            f"{self.runtime_site_url}{path}",
-            data=body,
-            method=method,
-            headers={
-                "Authorization": f"Bearer {self.job_token}",
-                "Accept": "application/json",
-                **({"Content-Type": "application/json"} if body is not None else {}),
-            },
-        )
+        request_limit = 1_048_576 if path.startswith("/worker/persist/") else 32_768
+        if body is not None and len(body) > request_limit:
+            raise WorkerClientError("REQUEST_TOO_LARGE")
         deadline = time.monotonic() + self.timeout_s
+        process: subprocess.Popen[bytes] | None = None
         try:
-            with build_opener(_NoRedirect()).open(request, timeout=self.timeout_s) as raw_result:
-                result: _ReadableResponse = raw_result
-                if not 200 <= result.status < 300:
-                    raise WorkerClientError("HTTP_STATUS")
-                raw = self._read_bounded(result, deadline)
-        except WorkerClientError:
-            raise
-        except HTTPError:
-            raise WorkerClientError("HTTP_STATUS") from None
-        except (URLError, OSError, socket.timeout, TimeoutError):
+            # Child owns all resolver/socket state. No background executor survives
+            # cancellation, and no shared lock can hold up a concurrent heartbeat.
+            envelope = json.dumps([
+                self.runtime_site_url, self.job_token, method, path,
+                body.decode("utf-8") if body is not None else None,
+                self.timeout_s, self.max_response_bytes,
+            ]).encode("utf-8")
+            process = subprocess.Popen(
+                [sys.executable, str(Path(__file__).with_name("_http_transport.py"))],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            )
+            remaining = max(0.0, deadline - time.monotonic())
+            wire, _ = process.communicate(envelope, timeout=remaining)
+            if time.monotonic() >= deadline:
+                raise WorkerClientError("TIMEOUT")
+            code, separator, raw = wire.partition(b"\n")
+            if process.returncode != 0 or not separator:
+                raise WorkerClientError("TRANSPORT_FAILED")
+            if code != b"OK":
+                safe_codes = {
+                    b"TIMEOUT", b"TRANSPORT_FAILED", b"HTTP_STATUS",
+                    b"REDIRECT_REJECTED", b"RESPONSE_TOO_LARGE",
+                }
+                raise WorkerClientError(
+                    code.decode("ascii") if code in safe_codes else "TRANSPORT_FAILED"
+                )
+        except subprocess.TimeoutExpired:
+            raise WorkerClientError("TIMEOUT") from None
+        except (OSError, ValueError, TypeError):
             raise WorkerClientError("TRANSPORT_FAILED") from None
+        finally:
+            if process is not None:
+                if process.poll() is None:
+                    process.kill()
+                process.communicate()
         try:
             decoded = raw.decode("utf-8")
             data = _json_value(json.loads(decoded))
             return response_type.model_validate(data)
-        except (UnicodeDecodeError, json.JSONDecodeError, ValidationError, ValueError):
+        except (UnicodeDecodeError, ValueError, RecursionError):
             raise WorkerClientError("INVALID_RESPONSE") from None
-
-    def _read_bounded(self, result: _ReadableResponse, deadline: float) -> bytes:
-        chunks: list[bytes] = []
-        total = 0
-        while True:
-            if time.monotonic() >= deadline:
-                raise WorkerClientError("TIMEOUT")
-            chunk = result.read(_READ_CHUNK_BYTES)
-            if not chunk:
-                return b"".join(chunks)
-            total += len(chunk)
-            if total > self.max_response_bytes or total > _PERSIST_RESPONSE_BYTES:
-                raise WorkerClientError("RESPONSE_TOO_LARGE")
-            chunks.append(chunk)
 
 
 def _json_value(value: object) -> JsonValue:
