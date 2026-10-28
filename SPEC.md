@@ -662,7 +662,7 @@ Key Convex functions (TypeScript, `convex/`):
 | `POST /api/l/[token]/code` | public, rate-limited | `{code}` → `200 {ok}` + `ns_student` cookie, `401 {error:"wrong_code", attemptsLeft}`, `423 {error:"locked", retryAt}`, `410 {error:"stopped"}` |
 | `GET /api/l/[token]/lesson` | student cookie | → snapshot payload for the UI (no coach id, no other students) |
 | `POST /api/l/[token]/media` | student cookie | `{asset}` → signed URL for an asset in the snapshot only |
-| `POST /api/worker/sign` | worker job token | `{ops: [{op: "get"\|"put", key, contentType?}]}` → signed URLs; keys must be under `sessions/{sessionId}/` for the token's session |
+| `POST /api/worker/sign` | worker job token | `{ops: [{op: "get"\|"put", key, contentType?}]}` → `{urls:[{op,key,url,expiresAt}]}` in request order; keys must be canonical keys strictly under `sessions/{sessionId}/` for the token's session. PUT requires `contentType`; GET forbids it. The route validates all operations before signing and returns no partial result. `expiresAt` is epoch milliseconds, capped by the token, live job lease and `SIGNED_URL_TTL_SECONDS` (default 600). |
 | `GET /api/health` | public | `{ok, version, convex: bool, storage: bool, orchestrator: {lastPollAt}}` (no secrets, no counts of users) |
 
 ### 10.3 Convex `/svc/*` HTTP actions (orchestrator)
