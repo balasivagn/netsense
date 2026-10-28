@@ -1312,9 +1312,14 @@ neutral enums and optional per-remark `mode`; labels are copied in code from
 immutable original turns using the existing UTF-16 span and word-boundary rules,
 or the existing role/one-based Remark label. Placement changes set `placedBy` to
 coach while preserving original `aiPlacement` and provenance; saves become
-unapproved drafts. Delete/undo do not resurrect approval. `correctTurn` updates
+unapproved drafts. Changing the per-remark mode also clears approval on every
+non-deleted sibling mark; each still requires its own approval. Label-source
+changes clear the previous optional span/neutral field before validation.
+Delete/undo do not resurrect approval. `correctTurn` updates
 only separate correction fields, displayed as “corrected by coach”; Hear coach
-always uses the original audio and original turn spans. Active jobs block mark
+always uses the original audio and original turn spans. Audio endpoints follow
+the media clock; buffering pauses endpoint timers rather than skipping unheard
+speech. Active jobs block mark
 changes. Missing/foreign/stale subject bindings and failed checks cannot approve
 tracked marks; note-only is a safe alternative.
 

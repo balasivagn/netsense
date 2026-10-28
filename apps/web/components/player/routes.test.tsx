@@ -392,3 +392,30 @@ test("direct coach switch hides cached old playback/review projection", async ()
   );
   expect(screen.queryAllByRole("blockquote")).toHaveLength(0);
 });
+
+test("Hear coach does not skip original speech when its media clock stalls", async () => {
+  const c = await harness();
+  const { HearCoach } = await import("./hear-coach");
+  const audio = document.createElement("audio");
+  vi.spyOn(audio, "play").mockResolvedValue();
+  const pause = vi.spyOn(audio, "pause").mockImplementation(() => {});
+  vi.stubGlobal("Audio", function () { return audio; });
+  render(<HearCoach sessionId={c.sessionId} remark={c.view.remarks[0]} />);
+  fireEvent.click(screen.getByRole("button", { name: "Hear coach" }));
+  await waitFor(() => expect(audio.onloadedmetadata).not.toBeNull());
+  fireEvent.loadedMetadata(audio);
+  vi.useFakeTimers();
+  try {
+    fireEvent.playing(audio);
+    const turn = c.view.remarks[0].turns[0];
+    await act(async () => { await vi.advanceTimersByTimeAsync(turn.endMs - turn.startMs + 100); });
+    expect(pause).not.toHaveBeenCalled();
+    fireEvent.waiting(audio);
+    await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+    expect(pause).not.toHaveBeenCalled();
+    fireEvent.playing(audio);
+    audio.currentTime = turn.endMs / 1000;
+    fireEvent.timeUpdate(audio);
+    expect(pause).toHaveBeenCalled();
+  } finally { vi.useRealTimers(); }
+});

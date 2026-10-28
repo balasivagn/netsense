@@ -43,6 +43,8 @@ export function HearCoach({
               audio.ontimeupdate = null;
               audio.onerror = null;
               audio.onplaying = null;
+              audio.onwaiting = null;
+              audio.onpause = null;
             }
             if (stopCurrent === cleanup) stopCurrent = undefined;
           };
@@ -78,13 +80,19 @@ export function HearCoach({
               )
                 advance();
             };
-            a.onplaying = () => {
+            const armEndpoint = () => {
               clearTimeout(timer);
-              timer = setTimeout(
-                advance,
-                Math.max(0, remark.turns[index].endMs - a.currentTime * 1000),
-              );
+              if (c.signal.aborted || index >= remark.turns.length) return;
+              timer = setTimeout(() => {
+                // Wall-clock time can pass while the media clock is buffering.
+                // Never skip unplayed original speech on a timer alone.
+                if (a.currentTime * 1000 >= remark.turns[index].endMs) advance();
+                else armEndpoint();
+              }, Math.max(20, remark.turns[index].endMs - a.currentTime * 1000));
             };
+            a.onplaying = armEndpoint;
+            a.onwaiting = () => clearTimeout(timer);
+            a.onpause = () => clearTimeout(timer);
             a.onloadedmetadata = playTurn;
             a.onerror = () => {
               if (!c.signal.aborted) {

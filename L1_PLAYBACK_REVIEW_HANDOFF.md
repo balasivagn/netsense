@@ -112,3 +112,18 @@ not merely that canvas callbacks stop. The direct account-switch test hides a
 cached projection using its authenticated owner identity stamp. Full checks and
 production build were repeated after that correction. No browser E2E/live vendor
 validation is claimed, and T1.24 remains partial for the boundaries above.
+
+## Parent review corrections
+
+Three failing reproductions now pass:
+- Switching between coach-word spans and neutral labels clears the old optional
+  source before validation, preserving original AI placement/provenance.
+- A per-remark mode change clears approvals on all affected non-deleted sibling
+  marks. No sibling is approved by the operation; the edited mark is coach-placed.
+- Hear coach's endpoint timer checks the media clock and pauses while buffering,
+  so elapsed wall time cannot skip unheard original speech.
+
+Parent `pnpm check`: PASS — **495 JS / 395 runner / 62 orchestrator tests**.
+Production web build, contract checks, secret scan and diff check PASS; actual
+staged commit hook runs on the parent correction. Retimed-range verification and
+approval remains pending; browser E2E/live Clerk/Convex remains UNTESTED.

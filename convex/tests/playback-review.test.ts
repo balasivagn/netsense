@@ -138,3 +138,48 @@ test("retime saves a single draft but cannot inherit approval from another check
       .annotations[0].status,
   ).toBe("needs_you");
 });
+
+test("label source can change in both directions without retaining the old optional field", async () => {
+  const c = await reviewReady();
+  const original = (await c.t.run(ctx => ctx.db.get(c.id)))!;
+  const fields = {
+    annotationId: c.id, markType: original.markType, anchor: original.anchor,
+    startMs: original.startMs, endMs: original.endMs,
+  };
+  await c.coach.mutation(api.review.edit, { ...fields, neutralLabel: "Batter" });
+  const neutral = (await c.t.run(ctx => ctx.db.get(c.id)))!;
+  expect(neutral.labelText).toBe("Batter");
+  expect(neutral.labelSpan).toBeUndefined();
+  await c.coach.mutation(api.review.edit, { ...fields, labelSpan: original.labelSpan });
+  const restored = (await c.t.run(ctx => ctx.db.get(c.id)))!;
+  expect(restored.labelText).toBe(original.labelText);
+  expect(restored.neutralLabel).toBeUndefined();
+  expect(restored.aiPlacement).toEqual(original.aiPlacement);
+  expect(restored.provenance).toEqual(original.provenance);
+});
+
+test("changing a remark's placement mode clears every affected approval without approving siblings", async () => {
+  const c = await reviewReady();
+  const original = (await c.t.run(ctx => ctx.db.get(c.id)))!;
+  const sibling = await c.t.run(async ctx => {
+    const { _id, _creationTime, ...fields } = original;
+    void _id; void _creationTime;
+    return ctx.db.insert("annotations", { ...fields, markId: original.markId + "-second" });
+  });
+  await c.coach.mutation(api.review.approve, { annotationId: c.id });
+  await c.coach.mutation(api.review.approve, { annotationId: sibling });
+  await c.coach.mutation(api.review.edit, {
+    annotationId: c.id, markType: original.markType, anchor: original.anchor,
+    startMs: original.startMs, endMs: original.endMs, labelSpan: original.labelSpan,
+    mode: "note_only",
+  });
+  const marks = await c.t.run(ctx => ctx.db.query("annotations").collect());
+  expect(marks).toHaveLength(2);
+  for (const mark of marks) {
+    expect(mark.status).toBe("needs_you");
+    expect(mark.approvedAt).toBeUndefined();
+  }
+  expect(marks.find(mark => mark._id === c.id)?.placedBy).toBe("coach");
+  await c.coach.mutation(api.review.approve, { annotationId: c.id });
+  expect((await c.t.run(ctx => ctx.db.get(sibling)))?.status).toBe("needs_you");
+});

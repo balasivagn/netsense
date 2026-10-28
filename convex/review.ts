@@ -236,7 +236,8 @@ export const edit = mutation({
           : (args.neutralLabel ?? "");
     }
     const { annotationId, mode, ...fields } = args;
-    const changed =
+    const modeChanged = mode !== undefined && mode !== x.r.mode;
+    const changed = modeChanged ||
       JSON.stringify([
         fields.markType,
         fields.anchor,
@@ -256,11 +257,29 @@ export const edit = mutation({
     const next = {
       ...x.a,
       ...fields,
+      labelSpan: args.labelSpan,
+      neutralLabel: args.neutralLabel,
+      arrowFrom: args.arrowFrom,
       labelText,
       placedBy: changed ? ("coach" as const) : x.a.placedBy,
     };
     await valid(ctx, { ...x, r: { ...x.r, mode: mode ?? x.r.mode } }, next);
-    if (mode) await ctx.db.patch(x.r._id, { mode });
+    if (modeChanged) {
+      // Mode belongs to the remark, so every sibling placement changes too.
+      // Clear affected approvals; each mark still requires individual approval.
+      await ctx.db.patch(x.r._id, { mode });
+      const siblings = await ctx.db.query("annotations")
+        .withIndex("by_sessionId_status", q => q.eq("sessionId", x.s._id))
+        .collect();
+      for (const sibling of siblings) {
+        if (sibling._id === annotationId || sibling.coachId !== x.s.coachId ||
+          sibling.remarkId !== x.r.remarkId || sibling.status === "deleted") continue;
+        await ctx.db.patch(sibling._id, {
+          status: "needs_you", approvedAt: undefined,
+          updatedAt: await changedAt(ctx, sibling),
+        });
+      }
+    }
     await ctx.db.patch(annotationId, {
       ...fields,
       labelSpan: args.labelSpan,
