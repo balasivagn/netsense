@@ -5,6 +5,7 @@ import { useMutation } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import { Screen06CaptureControls } from "../capture/screen06-capture-controls";
+import type { SelectionFrame } from "../subject-picker/frame-scrubber";
 import { SubjectPicker } from "../subject-picker/subject-picker";
 import { useSessionFlow } from "./session-context";
 import styles from "./sessions.module.css";
@@ -50,9 +51,12 @@ export function RecordSession() {
         onFileSelected={async (file, mode) => {
           // Reselecting a reserved source does not change how it was captured.
           // A camera recording is normally resumed through the camera-roll picker.
-          const captureMode = detail.upload &&
-            (detail.captureMode === "camera" || detail.captureMode === "camera_roll")
-            ? detail.captureMode : mode;
+          const captureMode =
+            detail.upload &&
+            (detail.captureMode === "camera" ||
+              detail.captureMode === "camera_roll")
+              ? detail.captureMode
+              : mode;
           if (await flow.select(file, captureMode)) {
             if (!active.current) return;
             void flow.retry();
@@ -203,23 +207,62 @@ export function SubjectSession() {
   useEffect(() => {
     if (detail.job) router.replace(`/sessions/${detail.id}/status`);
   }, [detail.job, detail.id, router]);
-  // Integration boundary: only real post-upload selection frames may enter here.
-  // No extractor exists yet. Do not feed pipeline frames or start analysis before a tap.
-  if (fallback || !state.file)
+  const remote = fallback || !state.file;
+  const [attempt, setAttempt] = useState(0);
+  const [frames, setFrames] = useState<SelectionFrame[]>();
+  const [frameError, setFrameError] = useState(false);
+  useEffect(() => {
+    setFrames(undefined);
+    setFrameError(false);
+    if (!remote || !detail.upload?.complete || detail.job) return;
+    const controller = new AbortController();
+    void fetch(`/api/sessions/${detail.id}/selection-frames`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        if (!response.ok) throw Error("unavailable");
+        const body = await response.json();
+        if (
+          !Array.isArray(body.selectionFrames) ||
+          !body.selectionFrames.length
+        )
+          throw Error("unavailable");
+        if (!controller.signal.aborted)
+          setFrames(
+            body.selectionFrames.map(({ idx, ms, url }: SelectionFrame) => ({
+              idx,
+              ms,
+              url,
+            })),
+          );
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setFrameError(true);
+      });
+    return () => controller.abort();
+  }, [remote, detail.id, detail.upload?.complete, detail.job, attempt]);
+  if (remote && !frames)
     return (
       <main className={styles.screen}>
         <h1>Pick who to follow</h1>
         <p>Tap the player to follow. Other people in the video are ignored.</p>
         {detail.upload?.complete ? (
-          <p>
-            Upload complete. Selection frames for clips this phone cannot open
-            are not available yet. Choose the same clip on a device that can
-            open it to pick your player.
-          </p>
+          frameError ? (
+            <>
+              <p role="alert">
+                Couldn’t open selection frames. Please try again.
+              </p>
+              <button onClick={() => setAttempt((value) => value + 1)}>
+                Try again
+              </button>
+            </>
+          ) : (
+            <p role="status">Preparing selection frames…</p>
+          )
         ) : (
           <p>
-            Choose the clip again to pick your player locally, or finish
-            uploading first. Processing waits for your tap.
+            Finish uploading to choose a frame. Processing waits for your tap.
           </p>
         )}
         <div className={styles.actions}>
@@ -228,14 +271,9 @@ export function SubjectSession() {
           </Link>
           <Link href={`/sessions/${detail.id}/upload`}>Upload status</Link>
         </div>
-        {state.file && (
-          <button onClick={() => setFallback(false)}>
-            Try opening this clip again
-          </button>
-        )}
       </main>
     );
-  if (!state.sourceVerified)
+  if (!remote && !state.sourceVerified)
     return (
       <main className={styles.screen}>
         <h1>Checking your clip</h1>
@@ -246,7 +284,8 @@ export function SubjectSession() {
   return (
     <>
       <SubjectPicker
-        file={state.file}
+        file={remote ? undefined : state.file}
+        selectionFrames={remote ? frames : undefined}
         role={detail.subjectRole}
         confirmationState={confirmation}
         confirmationError={error}
@@ -282,6 +321,14 @@ export function SubjectSession() {
         }}
       />
       <div className={styles.screen}>
+        {remote && (
+          <button
+            disabled={confirmation === "pending"}
+            onClick={() => setAttempt((value) => value + 1)}
+          >
+            Refresh frames
+          </button>
+        )}
         <Link href={`/sessions/${detail.id}/upload`}>Upload status</Link>
       </div>
     </>

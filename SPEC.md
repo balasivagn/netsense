@@ -80,7 +80,7 @@ Visual rules for every screen:
 | 03 | Sessions list (`03-sessions-list.png`) | `/sessions` | One row per session with live status from the latest `jobs` row. Filters All / Needs you / Shared. Row tap routes by state: processing → 12, review ready → 17, error → 13–16, shared → 23. | filter, open row, + New session | "! Fix" badge for failed sessions; "Still frames only" label for stills sessions; "Upload failed" after 3 upload attempts |
 | 04 | New session (`04-new-session.png`, **changed in v1.1**) | `/sessions/new` | Pick **who this lesson is for** (existing students or + Add a student by label) and what they are doing: **Batting / Bowling / Other**. Writes `sessions.studentId`, `sessions.subjectRole`. The wireframe's separate bowler picker is dropped (one person in focus, F1). No consent badges. | select, + Add a student, pick role, Continue | Continue disabled until a student and role are picked |
 | 06 | How to record (`06-how-to-record.png`) | `/sessions/[id]/record` | Main: Record with phone camera (`<input type="file" accept="video/*" capture="environment">`); Upload from camera roll (`<input type="file" accept="video/*">`). In-page recording is an **extra** (X1), hidden in M1. Writes `sessions.captureMode`. **Consent checkbox (required, C-C):** one checkbox above the buttons, unticked by default: "Everyone filmed in this clip is an adult and agreed to be filmed." Ticking it calls `sessions.confirmConsent` (stores `consentConfirmedAt`, `consentConfirmedBy`). Not a full consent flow. | Tick consent, Open camera, Pick clip | Open camera and Pick clip are disabled until the box is ticked; if `/api/uploads` still returns `CONSENT_REQUIRED` (e.g. stale tab), the box is shown unticked again with "Please confirm before uploading." Hide in-page option when MediaRecorder is missing (X1 only) |
-| 07a | **Pick who to follow** (new in v1.1, no wireframe yet; design gap flagged to Bala) | `/sessions/[id]/subject` (shown alongside 07 while the upload runs) | The browser decodes the chosen file locally (`<video>` + canvas, no network) and shows a frame scrubber. The coach scrubs to a frame where their player is clear and **taps the person**. Writes `sessions.subject = {frameMs, point: {x, y} (0–1), role, selectedBy: "coach", selectedAt}` via `sessions.setSubject`. Copy: "Tap the player to follow. Other people in the video are ignored." | scrub, tap, Retake tap, Confirm | No frame decodes in the browser (some HEVC on Android) → "Pick after upload": complete the upload, then use selection-only server frames before the tap. This extractor is pending integration; the current route truthfully states that selection frames are not available. Analysis/transcode pipeline jobs still wait for the tap. The pipeline does not start until both the upload is complete and a subject is set. |
+| 07a | **Pick who to follow** (new in v1.1, no wireframe yet; design gap flagged to Bala) | `/sessions/[id]/subject` (shown alongside 07 while the upload runs) | The browser decodes the chosen file locally (`<video>` + canvas, no network) and shows a frame scrubber. The coach scrubs to a frame where their player is clear and **taps the person**. Writes `sessions.subject = {frameMs, point: {x, y} (0–1), role, selectedBy: "coach", selectedAt}` via `sessions.setSubject`. Copy: "Tap the player to follow. Other people in the video are ignored." | scrub, tap, Retake tap, Confirm | No frame decodes in the browser (some HEVC on Android) → "Pick after upload": complete the upload, then use selection-only server frames before the tap. The authenticated selection-frame endpoint below supplies real frames, including after reload without the local File. Analysis/transcode pipeline jobs still wait for the tap. The pipeline does not start until both the upload is complete and a subject is set. |
 | 07 | Upload progress (`07-upload-progress.png`) | `/sessions/[id]/upload` | Resumable multipart upload; progress counts only parts the server confirmed (`uploads.bytesConfirmed`, `partsConfirmed`). | Pause, Cancel (asks first) | Dropped connection or app switch → 08 |
 | 08 | Upload paused / failed (`08-upload-failed.png`) | same route, state | "Nothing is lost": confirmed parts are kept; retry with backoff. | Retry now, Choose the clip again (matched by SHA-256) | After 3 attempts Sessions shows "Upload failed"; checksum mismatch on re-pick: "This isn't the same clip" |
 | 09–11 | In-page recording (`09`, `10`, `11`) | `/sessions/[id]/record/live` | **Extra X1, option only, not in M1.** Spec in §22.3. | | |
@@ -659,7 +659,7 @@ Key Convex functions (TypeScript, `convex/`):
 | `POST /api/uploads/[uploadId]/parts/confirm` | coach | `{partNumber, etag, bytes}` → `{bytesConfirmed}` (progress counts confirmed parts only) |
 | `POST /api/uploads/[uploadId]/complete` | coach | `{}` → `{jobId: string|null}` (`null` while waiting for the subject tap). Completes multipart, `HEAD` checks size = `bytesTotal`, then `jobs.enqueue(kind="pipeline")` **only if `sessions.subject` is set**; otherwise the session waits in `subjectStatus = "needed"` and `sessions.setSubject` enqueues. SHA-256 is verified by `transcode`. |
 | `POST /api/uploads/[uploadId]/abort` | coach | → `{}` (asks first in the UI) |
-
+| `GET /api/sessions/[id]/selection-frames` | coach | No body/query → `{selectionFrames:[{idx,ms,width,height,url}]}`. Completed owned consented local source only; selection-only bounds below. |
 | `PUT /api/media/local/[...key]` | HMAC signed URL | local driver only: receives a part or file |
 | `GET /api/media/local/[...key]` | HMAC signed URL | local driver only: serves with `Range` support |
 | `POST /api/media/sign` | coach | `{sessionId, asset: "proxy"\|"preview"\|"final"\|"audio"\|"still:{annotationId}"\|"track:{remarkId}"}` → `{url, expiresAt}` (TTL `SIGNED_URL_TTL_SECONDS`, default 600) |
@@ -668,6 +668,65 @@ Key Convex functions (TypeScript, `convex/`):
 | `POST /api/l/[token]/media` | student cookie | `{asset}` → signed URL for an asset in the snapshot only |
 | `POST /api/worker/sign` | worker job token | `{ops: [{op: "get"\|"put", key, contentType?}]}` → `{urls:[{op,key,url,expiresAt}]}` in request order; keys must be canonical keys strictly under `sessions/{sessionId}/` for the token's session. PUT requires `contentType`; GET forbids it. The route validates all operations before signing and returns no partial result. `expiresAt` is epoch milliseconds, capped by the token, live job lease and `SIGNED_URL_TTL_SECONDS` (default 600). |
 | `GET /api/health` | public | `{ok, version, convex: bool, storage: bool, orchestrator: {lastPollAt}}` (no secrets, no counts of users) |
+
+#### Screen 07a selection-only fallback (T1.35 partial; T1.05/T1.06 integration)
+
+`GET /api/sessions/[id]/selection-frames` has no query parameters or body.
+It uses `getCoachRouteAuth` and the coach's Convex token to call the owner-only
+`selectionFrames.source({sessionId})` query. That read requires consent, exactly
+one canonical local source, authoritative upload completion, confirmed size and
+immutable expected SHA-256. Foreign, missing, incomplete and aborted sources fail
+before storage/tools. It does not enqueue jobs or write Convex records.
+The no-store response is `{selectionFrames:[{idx,ms,width,height,url}]}`; URLs
+expire after 300 seconds and are refreshed by repeating this authorized request.
+Errors are fixed `UNAUTHENTICATED` (401), `INVALID_REQUEST` (400), or
+`SELECTION_BUSY`/`SELECTION_UNAVAILABLE` (409); diagnostics are never returned.
+No source key, external URL, path or tool argument is accepted from a client.
+
+Local driver only; R2 fails closed. Real `ffprobe`/`ffmpeg` must be on PATH
+(ffmpeg 8+ for the square-pixel scale filter). Private temporary directories use
+TMPDIR when configured, otherwise ignored `.orca-scratch/`, with mode 0700.
+The source is streamed through LocalVideoStorage's regular-file/no-follow boundary
+into private scratch, capped at 2 GiB and checked against exact size/SHA before
+any tool or output, including cache hits. No generic coach signing API is added.
+
+Optional `SELECTION_FRAME_COUNT` defaults to 12 (integer 2–24), and
+`SELECTION_MAX_DURATION_S` defaults to 600 (integer 1–600). Blank/unset uses the
+default; invalid settings fail closed. Duration must be positive, within that cap;
+input raster is at most 8192 per side and 33,554,432 pixels. Seek targets are
+evenly spaced from zero through `(count-1)/count` of duration. Each seek emits
+one real JPEG with its measured clip-relative PTS (`copyts` + `start_at_zero`,
+rounded milliseconds), deduplicating
+identical times. Automatic display rotation and square-pixel normalization precede
+aspect-preserving scaling inside 640×640. Geometry comes from the output filter;
+points remain normalized to that displayed frame, consistent with pipeline display
+orientation. No guessed timestamps or fabricated frames. These sparse selection
+frames are separate from full transcode's 2 fps keyframes.
+
+Hard request deadline: 90 seconds covering auth, source I/O and all tools. Client
+cancellation aborts I/O, kills/reaps the active child before scratch cleanup.
+At most four requests and four outstanding auth operations are admitted per process
+(no waiting queue). At most two extractions run per process, one per source/config identity;
+excess and overlapping callers get busy immediately, with no pending extraction
+queue. Tool arguments are arrays, no shell; demuxers restricted to MOV/Matroska/WebM,
+protocols file/pipe, one codec/filter thread, allocation limit 64 MiB,
+combined captured diagnostics 64 KiB, JPEG 1 MiB and total JPEG bytes 8 MiB.
+All children receive PATH/optional TMPDIR and fixed NODE_ENV only, no inherited
+credentials. Success, failure and cancellation remove private scratch.
+
+Derived keys are `sessions/{id}/selection/{sourceSha}/v1-{count}-{durationCap}/{index}.jpg`.
+All JPEGs are extracted and validated before publication; storage atomically
+publishes each complete file. A bounded 64-entry process-local completed manifest
+is installed only after every publication succeeds, with JPEG hashes. Cache reuse
+revalidates the original source and all cached JPEG hashes; missing/corrupt cache
+is rebuilt. No incomplete manifest is signed/returned. A partial publication on
+I/O failure has no completed manifest; retry rebuilds it. After web-process restart
+frames are regenerated from the completed source (no in-memory File required).
+This follows the existing single-web-process local storage assumption; no shared
+multi-process cache guarantee. No signed URL is stored in DB, manifest or logs.
+No proxy/audio/transcript/anchor/tracking/model call is made. Analysis still waits
+for completed upload AND a coach-confirmed subject through the unchanged gate.
+Live auth/browser/vendor behavior and resource performance remain **UNTESTED**.
 
 #### Local upload backend boundary (T1.06 / T1.37 partial)
 
@@ -1073,7 +1132,7 @@ These make the shorthand above executable; they do not mark IC1 deployed or merg
 - Consent confirmation is session-scoped. `sessions.confirmConsent({sessionId})` is a public owner-only mutation with no client-supplied timestamp or user-id arguments. Its first authorized call atomically writes `consentConfirmedAt = Date.now()` and `consentConfirmedBy = identity.subject`, where `identity.subject` is the authenticated Clerk user ID stored on `coaches.clerkUserId`. Repeated or concurrent calls preserve those first values. Sessions created before confirmation have neither optional field and are unconfirmed. This M1 record has no unconfirm operation and does not create a `consents` table or per-person records.
 - Rollup uses the job's pinned config and the latest attempt per stage/remark. `progress` is completed planned slots / planned slots; `progressLabel` is completed / planned for the first unfinished coach row. Subject anchor is one session-level `subject` run, plus one `subject` run per tracked remark. `no`/`general` remarks add no fan-out slots. Fan-out becomes known after plan, so the denominator can grow. `done`, `skipped`, `fallback`, and `needs_coach` settle a slot; `failed` remains unfinished for retry. Usage accumulates once per finished attempt, including failed paid attempts. Foundation supports pipeline and subject-retrack rollup; action-specific retry/finalize entry points remain later work.
 
-**Approved exception: selection frames before the tap (Bala, 28 Oct 2026).** When a phone cannot decode the clip, screen 07a's “Pick after upload” may request limited server-side extraction of selection frames from the completed upload. This step extracts selection frames only: no audio/transcription, subject anchoring, tracking, marks or analysis pipeline runs before the coach confirms a tap. The existing analysis job gate still requires both upload completion and the selected subject. Only the selected person is subsequently followed. Consent, authenticated ownership and upload validation still apply. The selection-frame fallback remains unimplemented and **UNTESTED** until T1.35's integration and acceptance tests pass.
+**Approved exception: selection frames before the tap (Bala, 28 Oct 2026).** When a phone cannot decode the clip, screen 07a's “Pick after upload” may request limited server-side extraction of selection frames from the completed upload. This step extracts selection frames only: no audio/transcription, subject anchoring, tracking, marks or analysis pipeline runs before the coach confirms a tap. The existing analysis job gate still requires both upload completion and the selected subject. Only the selected person is subsequently followed. Consent, authenticated ownership and upload validation still apply. The local-only selection-frame fallback is implemented with real-tool/transaction harness tests; live Clerk/Convex browser behavior remains **UNTESTED**. T1.35 remains partial for later review/retrack entry points.
 
 **Approved: retrack prerequisites after anchor failure (Bala, 28 Oct 2026).** After the coach confirms a new tap, a `subject_retrack` job reuses completed transcode, transcription, plan and per-remark moment outputs. Once the new subject anchor succeeds, it computes only missing per-remark moments before the subject → track → place → check branch. Existing completed moments are not recomputed; there is no full pipeline restart and no fabricated prerequisite output. This resolves the §6.5 reuse shorthand when the initial pipeline stopped before moments existed. T1.09 implementation and acceptance tests remain pending/UNTESTED.
 

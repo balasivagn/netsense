@@ -464,3 +464,61 @@ test("camera upload resumes from camera-roll reselect after reload without chang
   await act(async () => { h.gate.resolve(); await h.gate.promise; });
   await waitFor(async () => expect((await h.coach.query(api.coachSessions.detail, { sessionId: h.sessionId })).upload?.complete).toBe(true));
 });
+
+test("reload without File loads remote picker, safely retries and confirms one subject", async () => {
+  const h = await harness();
+  await h.coach.mutation(api.sessions.confirmConsent, { sessionId: h.sessionId });
+  // Completed upload through the same real reservation/completion transactions.
+  const u = await h.t.mutation(internal.uploads.reserve, {
+    sessionId: h.sessionId, coachId: h.coachId, sha256: data.upload.sha256,
+    mimeType: data.upload.mimeType, bytesTotal: data.upload.bytesTotal,
+    multipartUploadId: "00000000-0000-4000-8000-000000000000",
+  });
+  await h.coach.mutation(api.sessions.confirmConsent, { sessionId: h.sessionId });
+  await h.t.run(ctx => ctx.db.patch(u._id, { phase: "completing", bytesConfirmed: data.upload.bytesTotal }));
+  await h.t.mutation(internal.uploads.complete, { uploadId: u._id, coachId: h.coachId, verifiedBytes: data.upload.bytesTotal });
+  await h.sync();
+  const fetcher = vi.fn().mockResolvedValueOnce(new Response(null, { status: 409 })).mockResolvedValue(Response.json({ selectionFrames: [
+    { idx: 0, ms: 0, url: "https://media.invalid/selection-a" },
+    { idx: 1, ms: 1000, url: "https://media.invalid/selection-b" },
+  ] }));
+  vi.stubGlobal("fetch", fetcher);
+  const view = render(<SessionLayout><SubjectPage /></SessionLayout>);
+  expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Couldn’t open selection frames. Please try again.");
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  await screen.findByRole("group", { name: "Selection frames" });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(grabFrame)).not.toHaveBeenCalled();
+  const img = screen.getByAltText("Selected video frame");
+  Object.defineProperty(img, "naturalWidth", { configurable: true, value: 400 });
+  Object.defineProperty(img, "naturalHeight", { configurable: true, value: 200 });
+  fireEvent.load(img);
+  await tapPlayer();
+  await waitFor(() => expect(state.push).toHaveBeenCalledWith(`/sessions/${h.sessionId}/status`));
+  expect(await h.t.run(ctx => ctx.db.query("jobs").collect())).toHaveLength(1);
+  expect((await h.coach.query(api.sessions.get, { sessionId: h.sessionId })).subject?.selectedBy).toBe("coach");
+  const signal = fetcher.mock.calls[1][1].signal as AbortSignal;
+  view.unmount();
+  expect(signal.aborted).toBe(true);
+  vi.unstubAllGlobals();
+});
+
+test("late remote frames after logout are aborted and never enter the new scope", async () => {
+  const h = await harness();
+  await h.coach.mutation(api.sessions.confirmConsent, { sessionId: h.sessionId });
+  // Query delivery is controlled; no runtime auth bypass is installed.
+  state.detail = { ...(state.detail as object), upload: { complete: true } };
+  let finish!: (value: Response) => void;
+  const fetcher = vi.fn(() => new Promise<Response>(resolve => { finish = resolve; }));
+  vi.stubGlobal("fetch", fetcher);
+  const view = render(<SessionLayout><SubjectPage /></SessionLayout>);
+  await waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+  const signal = (fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].signal!;
+  state.userId = "";
+  view.rerender(<SessionLayout><SubjectPage /></SessionLayout>);
+  expect(signal.aborted).toBe(true);
+  await act(async () => finish(Response.json({ selectionFrames: [{ idx: 0, ms: 0, url: "https://media.invalid/old-selection" }] })));
+  expect(screen.queryByAltText("Selected video frame")).toBeNull();
+  expect(screen.getByText("Loading session…")).toBeTruthy();
+  vi.unstubAllGlobals();
+});

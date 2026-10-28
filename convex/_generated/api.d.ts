@@ -20,6 +20,7 @@ import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
 import type * as persistenceValidators from "../persistenceValidators.js";
 import type * as pipeline from "../pipeline.js";
+import type * as selectionFrames from "../selectionFrames.js";
 import type * as sessions from "../sessions.js";
 import type * as stageRuns from "../stageRuns.js";
 import type * as students from "../students.js";
@@ -43,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   jobs: typeof jobs;
   persistenceValidators: typeof persistenceValidators;
   pipeline: typeof pipeline;
+  selectionFrames: typeof selectionFrames;
   sessions: typeof sessions;
   stageRuns: typeof stageRuns;
   students: typeof students;

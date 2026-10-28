@@ -4,7 +4,7 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { constants, createReadStream } from "node:fs";
 import {
   lstat,
   link,
@@ -684,7 +684,10 @@ export class LocalVideoStorage implements VideoStorage {
     const object = await this.target(key);
     let handle: Awaited<ReturnType<typeof open>>;
     try {
-      handle = await open(object, "r");
+      handle = await open(
+        object,
+        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+      );
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT")
         throw new StorageError("OBJECT_NOT_FOUND", 404);
