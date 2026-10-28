@@ -6,6 +6,7 @@ dependencies = [
     "pydantic>=2.12,<3",
     "jsonschema>=4.25,<5",
     "pillow>=13.0.0",
+    "font-roboto==0.0.1",
 ]
 [build-system]
 requires = ["hatchling"]

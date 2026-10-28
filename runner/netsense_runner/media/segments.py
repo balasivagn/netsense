@@ -7,6 +7,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from netsense_runner.contracts.RenderInput import Annotation, Segment
+
 
 @dataclass(frozen=True, slots=True)
 class SegmentRange:
@@ -61,3 +63,22 @@ def merged_ranges(annotations: list[dict[str, Any]], duration_ms: int) -> list[S
             )
         )
     return result
+
+
+def build_segments(annotations: list[Annotation], duration_ms: int) -> list[Segment]:
+    """Stable DAG entry point. Hash all frozen fields; never reinterpret supplied hashes.
+
+    Range-based IDs remain stable when another, separate range is edited. A changed
+    range gets a new ID. Callers must invalidate reuse if proxy/track bytes change.
+    """
+    ranges = merged_ranges([item.model_dump() for item in annotations], duration_ms)
+    return [
+        Segment(
+            segmentId=f"s-{item.start_ms}-{item.end_ms}",
+            startMs=item.start_ms,
+            endMs=item.end_ms,
+            annotationIds=list(item.annotation_ids),
+            hash=item.digest,
+        )
+        for item in ranges
+    ]

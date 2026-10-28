@@ -145,9 +145,9 @@ def annotation(annotation_id: str = "a1", start: int = 300, end: int = 700) -> d
 
 def worker(storage: Storage) -> RenderWorker:
     return RenderWorker(
-        download=lambda url: iter([storage.objects[url.removeprefix("memory://")]]),
-        track_loader=lambda key: storage.objects[key],
-        object_exists=lambda key: key in storage.objects,
+        download=lambda url, **limits: iter([storage.objects[url.removeprefix("memory://")]]),
+        track_loader=lambda key, **limits: storage.objects[key],
+        object_exists=lambda key, **limits: key in storage.objects,
     )
 
 
@@ -165,8 +165,8 @@ def test_geometry_fixture_and_dashed_pixels() -> None:
         (10, 20, 90, 80),
         [OverlayMark("circle", "box_top", None, "", "ai")],
     )
-    assert cast(tuple[int, int, int, int], solid.getpixel((62, 20)))[3] > 0
-    assert cast(tuple[int, int, int, int], dashed.getpixel((62, 20)))[3] == 255
+    assert solid.convert("RGB").tobytes() != dashed.convert("RGB").tobytes()
+    assert solid.convert("RGB").getpixel((62, 20)) == (77, 103, 42)
     assert (
         json.loads(
             (Path(__file__).parents[2] / "fixtures/synthetic/overlay-geometry.json").read_text()
@@ -205,7 +205,9 @@ def test_real_render_has_audio_faststart_still_and_reuse(tmp_path: Path) -> None
         text=True,
     ).stdout
     assert (
-        "h264" in probe and "aac" in probe and float(json.loads(probe)["format"]["duration"]) > 1.7
+        "h264" in probe
+        and "aac" in probe
+        and abs(float(json.loads(probe)["format"]["duration"]) - 2) <= 0.034
     )
     assert b"moov" in rendered.read_bytes()[:4096]
     assert len(cast(list[object], output["stillRefs"])) == 1
@@ -217,10 +219,10 @@ def test_real_render_has_audio_faststart_still_and_reuse(tmp_path: Path) -> None
             "key": segment_refs[0]["key"],
         }
     ]
-    before = len([key for key in storage.puts if "/segments/" in key])
+    before = len([key for key in storage.puts if "/renders/preview/s0-" in key])
     reused = worker(storage).run(input_value([annotation()], previous=previous), context(storage))
     assert reused["status"] == "done"
-    assert len([key for key in storage.puts if "/segments/" in key]) == before
+    assert len([key for key in storage.puts if "/renders/preview/s0-" in key]) == before
 
 
 def test_empty_annotations_preserves_video_and_rejects_foreign_track(tmp_path: Path) -> None:
@@ -232,9 +234,7 @@ def test_empty_annotations_preserves_video_and_rejects_foreign_track(tmp_path: P
     bad = annotation()
     bad["trackFileRef"] = "sessions/other/tracks/r1.json"
     assert (
-        worker(storage).run(input_value([bad]), context(storage))[
-            "error_code"
-        ]
+        worker(storage).run(input_value([bad]), context(storage))["error_code"]
         == "CONTRACT_INVALID"
     )
 

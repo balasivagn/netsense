@@ -1,9 +1,128 @@
 {
-  "version": 1,
+  "version": 2,
   "coordinateUnits": "proxy-image pixels; boxes are [x1,y1,x2,y2], x2/y2 exclusive",
-  "anchor": {"box_center": [50, 50], "box_top": [50, 20], "box_bottom": [50, 80], "box_left": [10, 50], "box_right": [90, 50]},
-  "arrowSide": {"left": "36px left of anchor box", "right": "36px right of anchor box", "above": "36px above anchor box", "below": "36px below anchor box"},
+  "anchor": {
+    "box_center": [
+      50,
+      50
+    ],
+    "box_top": [
+      50,
+      20
+    ],
+    "box_bottom": [
+      50,
+      80
+    ],
+    "box_left": [
+      10,
+      50
+    ],
+    "box_right": [
+      90,
+      50
+    ]
+  },
+  "arrowSide": {
+    "left": "36px left of anchor box",
+    "right": "36px right of anchor box",
+    "above": "36px above anchor box",
+    "below": "36px below anchor box"
+  },
   "rounding": "round half up",
   "timeWindows": "half-open [startMs,endMs)",
-  "aiStroke": "8px dash, 6px gap; coach stroke is solid"
+  "aiStroke": "8px dash, 6px gap; coach stroke is solid",
+  "arrows": {
+    "left": {
+      "origin": [
+        -26,
+        50
+      ],
+      "head": [
+        [
+          50,
+          50
+        ],
+        [
+          42,
+          55
+        ],
+        [
+          42,
+          45
+        ]
+      ]
+    },
+    "right": {
+      "origin": [
+        126,
+        50
+      ],
+      "head": [
+        [
+          50,
+          50
+        ],
+        [
+          58,
+          45
+        ],
+        [
+          58,
+          55
+        ]
+      ]
+    },
+    "above": {
+      "origin": [
+        50,
+        -16
+      ],
+      "head": [
+        [
+          50,
+          50
+        ],
+        [
+          45,
+          42
+        ],
+        [
+          55,
+          42
+        ]
+      ]
+    },
+    "below": {
+      "origin": [
+        50,
+        116
+      ],
+      "head": [
+        [
+          50,
+          50
+        ],
+        [
+          55,
+          58
+        ],
+        [
+          45,
+          58
+        ]
+      ]
+    }
+  },
+  "box": [
+    10,
+    20,
+    90,
+    80
+  ],
+  "highlightCenterOnWhite": [
+    210,
+    217,
+    202
+  ]
 }
