@@ -1,0 +1,41 @@
+.screen {
+  box-sizing: border-box;
+  margin: 0 auto;
+  max-width: 390px;
+  min-height: 100dvh;
+  padding: 20px 16px 32px;
+}
+
+.back {
+  align-items: center;
+  color: inherit;
+  display: inline-flex;
+  min-height: 44px;
+  overflow-wrap: anywhere;
+}
+
+.back:focus-visible {
+  outline: 3px solid #4D672A;
+  outline-offset: 3px;
+}
+
+.header { margin-top: 20px; }
+.eyebrow { color: #566; font-size: 0.75rem; letter-spacing: 0.08em; margin: 0; text-transform: uppercase; }
+.header h1 { font-size: clamp(1.75rem, 8vw, 2.25rem); margin: 8px 0; overflow-wrap: anywhere; }
+.privateNote { margin: 0; }
+.status { font-weight: 700; margin: 16px 0 0; overflow-wrap: anywhere; }
+
+.progressSection { margin: 20px 0; }
+.progressSection progress { accent-color: #4D672A; display: block; height: 12px; max-width: 100%; width: 100%; }
+.progressLabel { margin: 8px 0 0; overflow-wrap: anywhere; }
+
+.list { display: grid; gap: 10px; list-style: none; margin: 24px 0 0; padding: 0; }
+.row { align-items: flex-start; border: 1px solid #c8c8c8; display: flex; gap: 12px; min-width: 0; padding: 12px; }
+.icon { align-items: center; border: 2px solid currentColor; border-radius: 50%; display: inline-flex; flex: 0 0 24px; font-weight: 700; height: 24px; justify-content: center; line-height: 1; width: 24px; }
+.iconcurrent { background: #4D672A; border-color: #4D672A; color: white; }
+.iconcompleted { border-radius: 2px; }
+.iconneeds-attention { border-radius: 2px; }
+.iconwaiting { border-style: dashed; }
+.rowContent { display: grid; gap: 4px; min-width: 0; }
+.label { font-weight: 700; overflow-wrap: anywhere; }
+.rowStatus { font-size: 0.875rem; overflow-wrap: anywhere; }
