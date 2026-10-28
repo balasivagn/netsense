@@ -27,3 +27,6 @@ encoded paths, backslashes and control characters before requesting a URL.
 The full network/storage client, upload retry behavior and DAG integration remain
 pending. Tests exercise actual local ffmpeg for MP4, WebM and HEVC/MOV, plus an
 in-memory HTTP response boundary; no live storage or vendor API was called.
+
+CI installs ffmpeg before checks. The first remote run failed because the Ubuntu
+runner did not have ffmpeg; the real media tests intentionally remain mandatory.
