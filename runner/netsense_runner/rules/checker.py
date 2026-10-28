@@ -54,6 +54,7 @@ def check_marks(
     track: TrackFile,
     config: CheckerConfig,
     subject_role: SubjectRole | None = None,
+    remark_number: int | None = None,
 ) -> CheckOutput:
     """Return contract-shaped verdicts without changing any coach text.
 
@@ -65,7 +66,7 @@ def check_marks(
     _validate_track(track)
     turns = _turns_by_id(input_value)
     verdicts = [
-        _check_mark(mark, input_value, track, turns, config, subject_role)
+        _check_mark(mark, input_value, track, turns, config, subject_role, remark_number)
         for mark in input_value.marks
     ]
     missing = {"no_player", "subject_swap", "low_coverage"}
@@ -93,10 +94,11 @@ def _check_mark(
     turns: dict[str, str],
     config: CheckerConfig,
     subject_role: SubjectRole | None,
+    remark_number: int | None,
 ) -> Verdict:
     if not _inside(mark.startMs, mark.endMs, input_value.momentStartMs, input_value.momentEndMs):
         return _verdict(mark.markId, "outside_moment")
-    label_reason = _label_reason(mark, turns, config, subject_role)
+    label_reason = _label_reason(mark, turns, config, subject_role, remark_number)
     if label_reason is not None:
         return _verdict(mark.markId, label_reason)
     if not track.frames:
@@ -121,11 +123,18 @@ def _label_reason(
     turns: dict[str, str],
     config: CheckerConfig,
     subject_role: SubjectRole | None,
+    remark_number: int | None,
 ) -> VerdictReason | None:
     if _utf16_units(mark.labelText) > config.label_max_utf16_units:
         return "label_too_long"
     if mark.neutralLabel is not None:
-        if subject_role is None or mark.labelSpan is not None:
+        if mark.labelSpan is not None:
+            return "label_mismatch"
+        if mark.neutralLabel == "Remark":
+            if type(remark_number) is not int or remark_number < 1:
+                return "label_mismatch"
+            return None if mark.labelText == f"Remark {remark_number}" else "label_mismatch"
+        if subject_role is None:
             return "label_mismatch"
         expected_neutral = RulesAdapter.neutral_label(subject_role)
         return (
