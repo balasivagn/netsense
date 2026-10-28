@@ -48,18 +48,24 @@ export function StatusSession() {
               {(job.errorCode && messages[job.errorCode]) ||
                 "This draft needs attention."}
             </p>
-            <p>Recovery actions are not available in this build yet.</p>
+            {job.errorCode === "RENDER_FAIL" && (
+              <Link href={`/sessions/${detail.id}/playback`}>
+                Open playback
+              </Link>
+            )}
+            {job.errorCode === "SUBJECT_NEEDED" && (
+              <Link href={`/sessions/${detail.id}/subject`}>
+                Pick who to follow
+              </Link>
+            )}
           </section>
         )}
       />
       {(job.status === "done" || job.status === "waiting_for_coach") &&
         !job.errorCode && (
           <div className={styles.screen}>
-            <p>
-              Processing has finished. Playback is not available in this build
-              yet.
-            </p>
-            {/* Completion target: /sessions/[id]/playback, supplied by the playback lane. */}
+            <p>Your draft is ready to review.</p>
+            <Link href={`/sessions/${detail.id}/playback`}>Open playback</Link>
           </div>
         )}
       {detail.isDemoFallback && (

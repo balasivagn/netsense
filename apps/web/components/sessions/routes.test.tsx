@@ -522,3 +522,98 @@ test("late remote frames after logout are aborted and never enter the new scope"
   expect(screen.getByText("Loading session…")).toBeTruthy();
   vi.unstubAllGlobals();
 });
+
+
+test("anchor-failed terminal job permits remote re-selection and routes only after confirmed retrack", async () => {
+  const h = await harness();
+  await h.coach.mutation(api.sessions.confirmConsent, {
+    sessionId: h.sessionId,
+  });
+  const u = await h.t.mutation(internal.uploads.reserve, {
+    sessionId: h.sessionId,
+    coachId: h.coachId,
+    sha256: data.upload.sha256,
+    mimeType: data.upload.mimeType,
+    bytesTotal: data.upload.bytesTotal,
+    multipartUploadId: "00000000-0000-4000-8000-000000000000",
+  });
+  await h.t.run((ctx) =>
+    ctx.db.patch(u._id, {
+      phase: "completing",
+      bytesConfirmed: data.upload.bytesTotal,
+    }),
+  );
+  await h.t.mutation(internal.uploads.complete, {
+    uploadId: u._id,
+    coachId: h.coachId,
+    verifiedBytes: data.upload.bytesTotal,
+  });
+  const jobId = await h.coach.mutation(api.sessions.setSubject, {
+    sessionId: h.sessionId,
+    frameMs: 0,
+    point: { x: 0.5, y: 0.5 },
+    role: "batter",
+  });
+  await h.t.run(async (ctx) => {
+    await ctx.db.patch(jobId!, {
+      status: "failed",
+      errorCode: "SUBJECT_NEEDED",
+    });
+    await ctx.db.patch(h.sessionId, { subjectStatus: "anchor_failed" });
+  });
+  await h.sync();
+  state.replace.mockClear();
+  state.push.mockClear();
+  const fetcher = vi.fn().mockImplementation(() =>
+    Promise.resolve(
+      Response.json({
+        selectionFrames: [
+          {
+            idx: 0,
+            ms: 0,
+            width: 400,
+            height: 200,
+            url: `https://media.invalid/api/media/local/sessions/${h.sessionId}/selection/a.jpg`,
+          },
+          {
+            idx: 1,
+            ms: 1000,
+            width: 400,
+            height: 200,
+            url: `https://media.invalid/api/media/local/sessions/${h.sessionId}/selection/b.jpg`,
+          },
+        ],
+      }),
+    ),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const view = render(
+    <SessionLayout>
+      <SubjectPage />
+    </SessionLayout>,
+  );
+  await screen.findByRole("group", { name: "Selection frames" });
+  expect(state.replace).not.toHaveBeenCalled();
+  expect(state.push).not.toHaveBeenCalled();
+  const img = screen.getByAltText("Selected video frame");
+  Object.defineProperty(img, "naturalWidth", {
+    configurable: true,
+    value: 400,
+  });
+  Object.defineProperty(img, "naturalHeight", {
+    configurable: true,
+    value: 200,
+  });
+  fireEvent.load(img);
+  await tapPlayer();
+  await waitFor(() =>
+    expect(state.push).toHaveBeenCalledWith(`/sessions/${h.sessionId}/status`),
+  );
+  const jobs = await h.t.run((ctx) => ctx.db.query("jobs").collect());
+  expect(jobs).toHaveLength(2);
+  expect(
+    jobs.filter((j) => j.kind === "subject_retrack" && j.status === "queued"),
+  ).toHaveLength(1);
+  view.unmount();
+  vi.unstubAllGlobals();
+});

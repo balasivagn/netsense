@@ -206,7 +206,8 @@ export function SubjectSession() {
   const [error, setError] = useState<string>();
   const [fallback, setFallback] = useState(false);
   useEffect(() => {
-    if (detail.job) router.replace(`/sessions/${detail.id}/status`);
+    if (detail.job && ["queued", "running"].includes(detail.job.status))
+      router.replace(`/sessions/${detail.id}/status`);
   }, [detail.job, detail.id, router]);
   const remote = fallback || !state.file;
   const [attempt, setAttempt] = useState(0);
@@ -215,7 +216,12 @@ export function SubjectSession() {
   useEffect(() => {
     setFrames(undefined);
     setFrameError(false);
-    if (!remote || !detail.upload?.complete || detail.job) return;
+    if (
+      !remote ||
+      !detail.upload?.complete ||
+      (detail.job && ["queued", "running"].includes(detail.job.status))
+    )
+      return;
     const controller = new AbortController();
     void loadSelectionFrames(detail.id, controller.signal)
       .then((selectionFrames) => {

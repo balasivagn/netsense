@@ -7,6 +7,13 @@ import type { FunctionReturnType } from "convex/server";
 import styles from "./sessions.module.css";
 type Session = FunctionReturnType<typeof api.coachSessions.detail>;
 export function sessionTarget(s: Session) {
+  if (
+    s.job &&
+    (s.job.status === "done" ||
+      s.job.errorCode === "RENDER_FAIL" ||
+      (s.job.status === "waiting_for_coach" && !s.job.errorCode))
+  )
+    return `/sessions/${s.id}/playback`;
   if (s.job) return `/sessions/${s.id}/status`;
   if (s.upload?.complete && !s.subjectSet) return `/sessions/${s.id}/subject`;
   if (s.upload) return `/sessions/${s.id}/upload`;

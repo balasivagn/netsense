@@ -1255,3 +1255,76 @@ local implementation; larger-file support is unsupported / UNTESTED.
 Automatic requeue remains disabled; incomplete attempts and prior-budget recovery
 remain partial. T1.09/T1.11 and full browser E2E/vendor behavior remain partial /
 UNTESTED as stated above.
+
+### Playback/review local integration clarification (T1.23 / T1.24)
+
+`playback.get({sessionId})` is an authenticated owner-only projection. It joins
+original transcript turns in the persisted remark order with exactly one space,
+separate optional coach corrections, marks without private provenance, exact
+current-subject track bindings, current-job preview references, and completed
+owned transcode artifact reference plus persistence receipt hash. A track must
+match annotation/remark/role and a completed track run's persisted binding; a
+subject-retrack cannot reuse the previous subject's bindings. No provider/model,
+worker token, trace, contact or full configuration is projected. Suggestions are
+read from actual owned lesson focus/practice rows; their editing/dismissal remains
+screen 21's lane. No synthetic fallback is loaded by these routes.
+
+The local `POST /api/media/sign` accepts exactly `{sessionId,asset}`. Supported
+assets are `proxy`, `audio`, current `preview`, `still:{annotationId}` and
+`track:{remarkId}`. Final media stays unavailable until approved snapshots and
+finalize are connected. Ownership and the closed selector are checked before
+storage. Source proxy/audio keys and measured dimensions/duration come from the
+actual completed TranscodeOutput artifact, validated against the generated
+contract and SHA-256 persistence receipt of canonical `{output}`. Only canonical
+same-session keys explicitly referenced by that output/current rows are signed;
+a session-prefix match alone never grants access. No arbitrary URL or write asset
+is accepted. Local GET TTL is `SIGNED_URL_TTL_SECONDS` (default 600, 1–3600).
+The response includes `{url,expiresAt,width,height,durationMs}`. A track response
+also includes `{trackId,track}` after full TrackFile schema and renderer semantic
+validation (1 MiB cap). Track URLs are GET-only and expire identically. R2 is
+unimplemented and UNTESTED. Responses are no-store and fixed errors disclose no
+raw output, URL, token or storage path.
+
+The signing route bounds request bodies to 4 KiB, Convex response bodies and JSON
+artifact/track reads to 1 MiB, each request to ten seconds, and concurrent requests
+and outstanding auth operations to four. Local asset reads use the existing
+no-follow regular-file boundary. Browser signing reads have a twelve-second
+header/body deadline and 1 MiB cap, reject redirects/foreign session URLs, and
+abort on session/login/navigation changes. Player signing queues are sequential
+per asset kind. Existing single-web-process local storage assumptions apply.
+
+Preview validity is conservative: latest owned job, ready preview, anchored
+current subject, and no newer annotation update. Review timestamps strictly
+exceed existing render timestamps even in the same millisecond. Any deletion,
+undo, approval or edit invalidates the mutable baked preview immediately. Missing,
+stale, failed or undecodable preview uses the real proxy plus live canvas; the
+canvas is absent over a baked preview. Still mode always retains its banner and
+never draws a tracked overlay on video. Current persisted stills are shown; edits
+that invalidate them leave a safe unavailable state until a new render exists.
+Native proxy pixels, half-up rounding, half-open boxes/windows and nearest safe
+observations follow `overlay_draw.py` and `s8_render.py`, including gap and
+first-swap suppression. Browser/Pillow text rasterization and live device visual
+parity remain UNTESTED.
+
+`review.approve/edit/move/delete/undoDelete` each accept exactly one annotation ID
+and authorize it transactionally. `edit` takes generated mark/anchor/arrow/span/
+neutral enums and optional per-remark `mode`; labels are copied in code from
+immutable original turns using the existing UTF-16 span and word-boundary rules,
+or the existing role/one-based Remark label. Placement changes set `placedBy` to
+coach while preserving original `aiPlacement` and provenance; saves become
+unapproved drafts. Delete/undo do not resurrect approval. `correctTurn` updates
+only separate correction fields, displayed as “corrected by coach”; Hear coach
+always uses the original audio and original turn spans. Active jobs block mark
+changes. Missing/foreign/stale subject bindings and failed checks cannot approve
+tracked marks; note-only is a safe alternative.
+
+T1.24 is PARTIAL: retimed drafts cannot inherit a checker verdict for a different
+time range. Approval requires the original checked range (or note-only). An
+atomic bridge from validated local frame observations to a newly checked range
+is still required before retimed approval can ship. This lane does not invent a
+public assertion of track validity. Screen 20 has a real `/review/[annotationId]/move`
+route plus the same inline editor; numeric millisecond retiming replaces drag
+controls for this increment. `FEATURE_REVIEW_MODE=full` is the default; `simple`
+hides tabs and mark/label/anchor changes, retaining individual approve/delete and
+retiming. Notes/share/student/finalize and per-remark recovery execution remain
+separate lanes. No working-looking links or actions point to their missing routes.

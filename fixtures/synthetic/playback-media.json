@@ -1,0 +1,5 @@
+{
+  "videoFilter": "testsrc2=size=1280x720:rate=25",
+  "audioFilter": "sine=frequency=440:sample_rate=48000",
+  "durationSeconds": 2
+}
