@@ -1,6 +1,12 @@
 @import "tailwindcss";
 body { margin: 0; background: #fafafa; color: #222; font-family: Arial, sans-serif; }
 
+.sign-in, .auth-state { margin: 0 auto; max-width: 390px; padding: 48px 24px; }
+.sign-in__brand { font-size: 1.25rem; font-weight: 700; }
+.sign-in h1 { font-size: 2.25rem; line-height: 1; text-transform: uppercase; }
+.sign-in__notice { background: #f1f1f1; border-radius: 12px; margin-top: 24px; padding: 16px; }
+.sign-in__offline { color: #7a1e1e; font-weight: 700; }
+
 .subject-picker { margin: 0 auto; max-width: 390px; padding: 20px 16px 32px; }
 .subject-picker__eyebrow { color: #566; font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; }
 .subject-picker__role { font-weight: 700; }
