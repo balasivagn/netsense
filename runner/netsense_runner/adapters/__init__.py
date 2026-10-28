@@ -1,0 +1,1 @@
+"""Provider-neutral stage adapters."""
