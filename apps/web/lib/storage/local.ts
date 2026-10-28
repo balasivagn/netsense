@@ -1,17 +1,37 @@
-import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import { createReadStream, createWriteStream } from "node:fs";
-import { lstat, link, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  createHash,
+  createHmac,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
+import { createReadStream } from "node:fs";
+import {
+  lstat,
+  link,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
-import { pipeline } from "node:stream/promises";
 import type { VideoStorage } from "./types";
 
 const MAX_TTL_SECONDS = 3600;
 const SESSION_PREFIX = "sessions/";
+// SPEC §5 has one web process. Share locks between adapter instances (routes
+// construct a fresh adapter); a multi-process local deployment is unsupported.
+const mutations = new Map<string, Promise<void>>();
+type Part = { partNumber: number; etag: string };
 
 type UploadState = {
   key: string;
   contentType: string;
   status: "in_progress" | "complete" | "aborted";
+  completedParts?: Part[];
 };
 
 export type SignedMediaRequest = {
@@ -31,13 +51,25 @@ export type LocalStorageOptions = {
 };
 
 export class StorageError extends Error {
-  constructor(message: string, readonly status = 400) {
+  constructor(
+    message: string,
+    readonly status = 400,
+    readonly resourceBytes?: number,
+  ) {
     super(message);
   }
 }
 
 function validKey(key: string): string[] {
-  if (!key.startsWith(SESSION_PREFIX) || key.includes("%") || key.includes("\\") || key.includes("\0"))
+  if (
+    !key.startsWith(SESSION_PREFIX) ||
+    key.includes("%") ||
+    key.includes("\\") ||
+    Array.from(key).some((character) => {
+      const code = character.charCodeAt(0);
+      return code < 32 || code === 127;
+    })
+  )
     throw new StorageError("INVALID_STORAGE_KEY");
   const pieces = key.split("/");
   if (pieces.some((piece) => !piece || piece === "." || piece === ".."))
@@ -51,7 +83,11 @@ function validPartNumber(partNumber: number): void {
 }
 
 function validUploadId(uploadId: string): void {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uploadId))
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      uploadId,
+    )
+  )
     throw new StorageError("INVALID_UPLOAD_ID");
 }
 
@@ -75,30 +111,59 @@ export class LocalVideoStorage implements VideoStorage {
   private readonly now: () => number;
 
   constructor(options: LocalStorageOptions) {
-    if (!options.rootDir) throw new StorageError("LOCAL_STORAGE_DIR_REQUIRED", 500);
-    if (!options.signingSecret) throw new StorageError("MEDIA_URL_SIGNING_SECRET_REQUIRED", 500);
+    if (!options.rootDir)
+      throw new StorageError("LOCAL_STORAGE_DIR_REQUIRED", 500);
+    if (!options.signingSecret)
+      throw new StorageError("MEDIA_URL_SIGNING_SECRET_REQUIRED", 500);
     this.rootDir = path.resolve(options.rootDir);
     this.secret = Buffer.from(options.signingSecret);
-    this.baseUrl = (options.baseUrl ?? "http://localhost:3000").replace(/\/$/, "");
+    this.baseUrl = (options.baseUrl ?? "http://localhost:3000").replace(
+      /\/$/,
+      "",
+    );
     this.now = options.now ?? Date.now;
+  }
+
+  private async mutate<T>(
+    key: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const pieces = validKey(key);
+    const lock = `${this.rootDir}/${pieces.slice(0, 2).join("/")}`;
+    const previous = mutations.get(lock) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mutations.set(lock, current);
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (mutations.get(lock) === current) mutations.delete(lock);
+    }
   }
 
   private async target(key: string): Promise<string> {
     const pieces = validKey(key);
     await mkdir(this.rootDir, { recursive: true });
     const rootStat = await lstat(this.rootDir);
-    if (rootStat.isSymbolicLink()) throw new StorageError("STORAGE_SYMLINK_ESCAPE", 403);
+    if (rootStat.isSymbolicLink())
+      throw new StorageError("STORAGE_SYMLINK_ESCAPE", 403);
     let current = this.rootDir;
     for (const piece of pieces) {
       current = path.join(current, piece);
       try {
-        if ((await lstat(current)).isSymbolicLink()) throw new StorageError("STORAGE_SYMLINK_ESCAPE", 403);
+        if ((await lstat(current)).isSymbolicLink())
+          throw new StorageError("STORAGE_SYMLINK_ESCAPE", 403);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
     }
     const target = path.resolve(this.rootDir, ...pieces);
-    if (!target.startsWith(`${this.rootDir}${path.sep}`)) throw new StorageError("INVALID_STORAGE_KEY");
+    if (!target.startsWith(`${this.rootDir}${path.sep}`))
+      throw new StorageError("INVALID_STORAGE_KEY");
     return target;
   }
 
@@ -111,7 +176,11 @@ export class LocalVideoStorage implements VideoStorage {
     return this.target(`${this.partsRoot(key)}/${uploadId}.json`);
   }
 
-  private async partPath(key: string, uploadId: string, partNumber: number): Promise<string> {
+  private async partPath(
+    key: string,
+    uploadId: string,
+    partNumber: number,
+  ): Promise<string> {
     validUploadId(uploadId);
     validPartNumber(partNumber);
     return this.target(`${this.partsRoot(key)}/${uploadId}/${partNumber}`);
@@ -120,17 +189,28 @@ export class LocalVideoStorage implements VideoStorage {
   private async readState(key: string, uploadId: string): Promise<UploadState> {
     const statePath = await this.statePath(key, uploadId);
     try {
-      const state = JSON.parse(await readFile(statePath, "utf8")) as UploadState;
-      if (state.key !== key || !state.contentType || !["in_progress", "complete", "aborted"].includes(state.status))
+      const state = JSON.parse(
+        await readFile(statePath, "utf8"),
+      ) as UploadState;
+      if (
+        state.key !== key ||
+        !state.contentType ||
+        !["in_progress", "complete", "aborted"].includes(state.status)
+      )
         throw new StorageError("INVALID_UPLOAD_STATE");
       return state;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new StorageError("UNKNOWN_UPLOAD", 404);
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        throw new StorageError("UNKNOWN_UPLOAD", 404);
       throw error;
     }
   }
 
-  private async saveState(key: string, uploadId: string, state: UploadState): Promise<void> {
+  private async saveState(
+    key: string,
+    uploadId: string,
+    state: UploadState,
+  ): Promise<void> {
     const target = await this.statePath(key, uploadId);
     await mkdir(path.dirname(target), { recursive: true });
     const temp = `${target}.${randomUUID()}.tmp`;
@@ -140,12 +220,24 @@ export class LocalVideoStorage implements VideoStorage {
 
   private signature(request: SignedMediaRequest): string {
     return createHmac("sha256", this.secret)
-      .update([request.method, request.key, request.exp, request.contentType ?? "", request.uploadId ?? "", request.partNumber ?? ""].join("\n"))
+      .update(
+        [
+          request.method,
+          request.key,
+          request.exp,
+          request.contentType ?? "",
+          request.uploadId ?? "",
+          request.partNumber ?? "",
+        ].join("\n"),
+      )
       .digest("base64url");
   }
 
   private signedUrl(request: SignedMediaRequest): string {
-    const query = new URLSearchParams({ exp: String(request.exp), sig: this.signature(request) });
+    const query = new URLSearchParams({
+      exp: String(request.exp),
+      sig: this.signature(request),
+    });
     if (request.contentType) query.set("ct", encode(request.contentType));
     if (request.uploadId) query.set("uploadId", request.uploadId);
     if (request.partNumber) query.set("partNumber", String(request.partNumber));
@@ -158,8 +250,19 @@ export class LocalVideoStorage implements VideoStorage {
     return Math.floor(this.now() / 1000) + ttlS;
   }
 
-  async initMultipart(key: string, contentType: string): Promise<{ uploadId: string }> {
-    if (!contentType || contentType.length > 200 || /[\r\n]/.test(contentType)) throw new StorageError("INVALID_CONTENT_TYPE");
+  async initMultipart(
+    key: string,
+    contentType: string,
+  ): Promise<{ uploadId: string }> {
+    return this.mutate(key, () => this.initUnlocked(key, contentType));
+  }
+
+  private async initUnlocked(
+    key: string,
+    contentType: string,
+  ): Promise<{ uploadId: string }> {
+    if (!contentType || contentType.length > 200 || /[\r\n]/.test(contentType))
+      throw new StorageError("INVALID_CONTENT_TYPE");
     const object = await this.target(key);
     try {
       await stat(object);
@@ -168,129 +271,257 @@ export class LocalVideoStorage implements VideoStorage {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
     const uploadId = randomUUID();
-    await this.saveState(key, uploadId, { key, contentType, status: "in_progress" });
-    await mkdir(path.dirname(await this.partPath(key, uploadId, 1)), { recursive: true });
+    await this.saveState(key, uploadId, {
+      key,
+      contentType,
+      status: "in_progress",
+    });
+    await mkdir(path.dirname(await this.partPath(key, uploadId, 1)), {
+      recursive: true,
+    });
     return { uploadId };
   }
 
-  async signPartUrls(key: string, uploadId: string, partNumbers: number[], ttlS: number) {
+  async signPartUrls(
+    key: string,
+    uploadId: string,
+    partNumbers: number[],
+    ttlS: number,
+  ) {
     const state = await this.readState(key, uploadId);
-    if (state.status !== "in_progress") throw new StorageError("INVALID_UPLOAD_STATE", 409);
-    if (!partNumbers.length || new Set(partNumbers).size !== partNumbers.length) throw new StorageError("INVALID_PART_NUMBERS");
+    if (state.status !== "in_progress")
+      throw new StorageError("INVALID_UPLOAD_STATE", 409);
+    if (!partNumbers.length || new Set(partNumbers).size !== partNumbers.length)
+      throw new StorageError("INVALID_PART_NUMBERS");
     const exp = this.expiry(ttlS);
     return partNumbers.map((partNumber) => {
       validPartNumber(partNumber);
-      return { partNumber, url: this.signedUrl({ method: "PUT", key, exp, contentType: state.contentType, uploadId, partNumber }), expiresAt: exp * 1000 };
+      return {
+        partNumber,
+        url: this.signedUrl({
+          method: "PUT",
+          key,
+          exp,
+          contentType: state.contentType,
+          uploadId,
+          partNumber,
+        }),
+        expiresAt: exp * 1000,
+      };
     });
   }
 
-  async completeMultipart(key: string, uploadId: string, parts: { partNumber: number; etag: string }[]): Promise<void> {
+  async completeMultipart(
+    key: string,
+    uploadId: string,
+    parts: { partNumber: number; etag: string }[],
+  ): Promise<void> {
+    return this.mutate(key, () => this.completeUnlocked(key, uploadId, parts));
+  }
+
+  private async completeUnlocked(
+    key: string,
+    uploadId: string,
+    parts: Part[],
+  ): Promise<void> {
     const state = await this.readState(key, uploadId);
-    if (state.status === "complete") return;
-    if (state.status !== "in_progress" || !parts.length || new Set(parts.map((part) => part.partNumber)).size !== parts.length)
+    if (
+      state.status === "aborted" ||
+      !parts.length ||
+      new Set(parts.map((part) => part.partNumber)).size !== parts.length
+    )
       throw new StorageError("INVALID_UPLOAD_STATE", 409);
     const ordered = [...parts].sort((a, b) => a.partNumber - b.partNumber);
-    for (const part of ordered) {
+    for (const [index, part] of ordered.entries()) {
       validPartNumber(part.partNumber);
+      if (part.partNumber !== index + 1)
+        throw new StorageError("MISSING_PART", 409);
+      if (!/^[a-f0-9]{64}$/.test(part.etag))
+        throw new StorageError("PART_ETAG_MISMATCH", 409);
+    }
+    if (state.status === "complete") {
+      if (JSON.stringify(state.completedParts) !== JSON.stringify(ordered))
+        throw new StorageError("COMPLETION_CONFLICT", 409);
+      if (!(await this.head(key)))
+        throw new StorageError("OBJECT_NOT_FOUND", 404);
+      return;
+    }
+    for (const part of ordered) {
       const actual = await this.partEtag(key, uploadId, part.partNumber);
-      if (!timingSafeEqual(Buffer.from(actual), Buffer.from(part.etag))) throw new StorageError("PART_ETAG_MISMATCH", 409);
+      if (!timingSafeEqual(Buffer.from(actual), Buffer.from(part.etag)))
+        throw new StorageError("PART_ETAG_MISMATCH", 409);
     }
     const object = await this.target(key);
     await mkdir(path.dirname(object), { recursive: true });
-    const temporary = `${object}.${uploadId}.assembling`;
+    const temporary = `${object}.${randomUUID()}.assembling`;
     try {
-      const destination = createWriteStream(temporary, { flags: "wx", mode: 0o600 });
-      for (const part of ordered) await pipeline(createReadStream(await this.partPath(key, uploadId, part.partNumber)), destination, { end: false });
-      destination.end();
-      await new Promise<void>((resolve, reject) => destination.once("finish", resolve).once("error", reject));
+      const destination = await open(temporary, "wx", 0o600);
+      try {
+        for (const part of ordered) {
+          for await (const chunk of createReadStream(
+            await this.partPath(key, uploadId, part.partNumber),
+          )) {
+            await destination.writeFile(chunk as Buffer);
+          }
+        }
+        await destination.sync();
+      } finally {
+        await destination.close();
+      }
       try {
         await link(temporary, object);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
         throw new StorageError("OBJECT_ALREADY_EXISTS", 409);
       }
-      await this.saveState(key, uploadId, { ...state, status: "complete" });
+      await this.saveState(key, uploadId, {
+        ...state,
+        status: "complete",
+        completedParts: ordered,
+      });
     } finally {
       await rm(temporary, { force: true });
     }
   }
 
   async abortMultipart(key: string, uploadId: string): Promise<void> {
+    return this.mutate(key, () => this.abortUnlocked(key, uploadId));
+  }
+
+  private async abortUnlocked(key: string, uploadId: string): Promise<void> {
     const state = await this.readState(key, uploadId);
-    if (state.status === "complete") throw new StorageError("INVALID_UPLOAD_STATE", 409);
+    if (state.status === "complete")
+      throw new StorageError("INVALID_UPLOAD_STATE", 409);
     const parts = await this.target(`${this.partsRoot(key)}/${uploadId}`);
     await rm(parts, { recursive: true, force: true });
     await this.saveState(key, uploadId, { ...state, status: "aborted" });
   }
 
-  async head(key: string): Promise<{ bytes: number; contentType?: string } | null> {
+  async head(
+    key: string,
+  ): Promise<{ bytes: number; contentType?: string } | null> {
     const object = await this.target(key);
     try {
       const metadata = await stat(object);
       if (!metadata.isFile()) return null;
-      return { bytes: metadata.size, contentType: await this.contentTypeFor(key) };
+      return {
+        bytes: metadata.size,
+        contentType: await this.contentTypeFor(key),
+      };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw error;
     }
   }
 
-  async signGetUrl(key: string, ttlS: number, opts?: { contentDisposition?: "inline" }): Promise<string> {
+  async signGetUrl(
+    key: string,
+    ttlS: number,
+    opts?: { contentDisposition?: "inline" },
+  ): Promise<string> {
     void opts;
-    if (!(await this.head(key))) throw new StorageError("OBJECT_NOT_FOUND", 404);
+    if (!(await this.head(key)))
+      throw new StorageError("OBJECT_NOT_FOUND", 404);
     return this.signedUrl({ method: "GET", key, exp: this.expiry(ttlS) });
   }
 
-  async signPutUrl(key: string, contentType: string, ttlS: number): Promise<string> {
-    if (!contentType || /[\r\n]/.test(contentType)) throw new StorageError("INVALID_CONTENT_TYPE");
+  async signPutUrl(
+    key: string,
+    contentType: string,
+    ttlS: number,
+  ): Promise<string> {
+    if (!contentType || /[\r\n]/.test(contentType))
+      throw new StorageError("INVALID_CONTENT_TYPE");
     await this.target(key);
-    return this.signedUrl({ method: "PUT", key, contentType, exp: this.expiry(ttlS) });
+    return this.signedUrl({
+      method: "PUT",
+      key,
+      contentType,
+      exp: this.expiry(ttlS),
+    });
   }
 
   async delete(keyOrPrefix: string): Promise<void> {
-    const target = await this.target(keyOrPrefix.replace(/\/$/, ""));
-    await rm(target, { recursive: true, force: true });
-    await rm(`${target}.parts`, { recursive: true, force: true });
+    const key = keyOrPrefix.replace(/\/$/, "");
+    return this.mutate(key, async () => {
+      const target = await this.target(key);
+      const parts = await this.target(`${key}.parts`);
+      await rm(target, { recursive: true, force: true });
+      await rm(parts, { recursive: true, force: true });
+    });
   }
 
-  async verifySignedRequest(request: Request, key: string): Promise<SignedMediaRequest> {
+  async verifySignedRequest(
+    request: Request,
+    key: string,
+  ): Promise<SignedMediaRequest> {
     const url = new URL(request.url);
     const method = request.method as "GET" | "PUT";
-    if (method !== "GET" && method !== "PUT") throw new StorageError("INVALID_METHOD", 405);
+    if (method !== "GET" && method !== "PUT")
+      throw new StorageError("INVALID_METHOD", 405);
     const exp = Number(url.searchParams.get("exp"));
     const sig = url.searchParams.get("sig");
     const uploadId = url.searchParams.get("uploadId") ?? undefined;
     const rawPart = url.searchParams.get("partNumber");
     const partNumber = rawPart === null ? undefined : Number(rawPart);
-    const contentType = url.searchParams.has("ct") ? decode(url.searchParams.get("ct")!) : undefined;
-    if (!Number.isSafeInteger(exp) || !sig || exp < Math.floor(this.now() / 1000) || (uploadId === undefined) !== (partNumber === undefined))
+    const contentType = url.searchParams.has("ct")
+      ? decode(url.searchParams.get("ct")!)
+      : undefined;
+    if (
+      !Number.isSafeInteger(exp) ||
+      !sig ||
+      exp <= Math.floor(this.now() / 1000) ||
+      (uploadId === undefined) !== (partNumber === undefined)
+    )
       throw new StorageError("INVALID_SIGNATURE", 403);
-    if (method === "PUT" && (!contentType || request.headers.get("content-type") !== contentType))
+    if (
+      method === "PUT" &&
+      (!contentType || request.headers.get("content-type") !== contentType)
+    )
       throw new StorageError("INVALID_CONTENT_TYPE", 403);
     if (partNumber !== undefined) validPartNumber(partNumber);
     if (uploadId) validUploadId(uploadId);
     const signed = { method, key, exp, contentType, uploadId, partNumber };
     const expected = Buffer.from(this.signature(signed));
     const supplied = Buffer.from(sig);
-    if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) throw new StorageError("INVALID_SIGNATURE", 403);
+    if (
+      expected.length !== supplied.length ||
+      !timingSafeEqual(expected, supplied)
+    )
+      throw new StorageError("INVALID_SIGNATURE", 403);
     await this.target(key);
     return signed;
   }
 
-  async writeSignedPut(request: Request, signed: SignedMediaRequest): Promise<{ etag: string; bytes: number }> {
+  async writeSignedPut(
+    request: Request,
+    signed: SignedMediaRequest,
+  ): Promise<{ etag: string; bytes: number }> {
+    return this.mutate(signed.key, () => this.writeUnlocked(request, signed));
+  }
+
+  private async writeUnlocked(
+    request: Request,
+    signed: SignedMediaRequest,
+  ): Promise<{ etag: string; bytes: number }> {
     if (!request.body) throw new StorageError("EMPTY_BODY");
-    const target = signed.uploadId && signed.partNumber
-      ? await this.partPath(signed.key, signed.uploadId, signed.partNumber)
-      : await this.target(signed.key);
+    const target =
+      signed.uploadId && signed.partNumber
+        ? await this.partPath(signed.key, signed.uploadId, signed.partNumber)
+        : await this.target(signed.key);
     if (signed.uploadId) {
       const state = await this.readState(signed.key, signed.uploadId);
-      if (state.status !== "in_progress" || state.contentType !== signed.contentType) throw new StorageError("INVALID_UPLOAD_STATE", 409);
+      if (
+        state.status !== "in_progress" ||
+        state.contentType !== signed.contentType
+      )
+        throw new StorageError("INVALID_UPLOAD_STATE", 409);
     }
     await mkdir(path.dirname(target), { recursive: true });
     const temporary = `${target}.${randomUUID()}.uploading`;
     const hash = createHash("sha256");
     let bytes = 0;
-    const writable = createWriteStream(temporary, { flags: "wx", mode: 0o600 });
+    const writable = await open(temporary, "wx", 0o600);
     const reader = request.body.getReader();
     try {
       while (true) {
@@ -298,13 +529,26 @@ export class LocalVideoStorage implements VideoStorage {
         if (next.done) break;
         bytes += next.value.byteLength;
         hash.update(next.value);
-        if (!writable.write(next.value)) await new Promise<void>((resolve, reject) => writable.once("drain", resolve).once("error", reject));
+        await writable.writeFile(next.value);
       }
-      writable.end();
-      await new Promise<void>((resolve, reject) => writable.once("finish", resolve).once("error", reject));
+      await writable.sync();
+      await writable.close();
+      const etag = hash.digest("hex");
       if (signed.uploadId) {
-        // A retry may replace only its own upload's part; final objects never overwrite.
-        await rename(temporary, target);
+        // Confirmed bytes are immutable. Only byte-identical part retries succeed.
+        try {
+          await link(temporary, target);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+          if (
+            (await this.partEtag(
+              signed.key,
+              signed.uploadId,
+              signed.partNumber!,
+            )) !== etag
+          )
+            throw new StorageError("PART_CONFLICT", 409);
+        }
       } else {
         try {
           await link(temporary, target);
@@ -313,18 +557,33 @@ export class LocalVideoStorage implements VideoStorage {
             throw new StorageError("OBJECT_ALREADY_EXISTS", 409);
           throw error;
         }
+        const metadata = await this.target(
+          `${this.partsRoot(signed.key)}/object.json`,
+        );
+        await mkdir(path.dirname(metadata), { recursive: true });
+        await writeFile(
+          metadata,
+          JSON.stringify({
+            key: signed.key,
+            contentType: signed.contentType,
+            status: "complete",
+          }),
+          { mode: 0o600 },
+        );
       }
-      return { etag: hash.digest("hex"), bytes };
-    } catch (error) {
-      writable.destroy();
-      throw error;
+      return { etag, bytes };
     } finally {
+      await writable.close();
       reader.releaseLock();
       await rm(temporary, { force: true });
     }
   }
 
-  async partEtag(key: string, uploadId: string, partNumber: number): Promise<string> {
+  async partEtag(
+    key: string,
+    uploadId: string,
+    partNumber: number,
+  ): Promise<string> {
     const file = await this.partPath(key, uploadId, partNumber);
     try {
       const handle = await open(file, "r");
@@ -336,7 +595,8 @@ export class LocalVideoStorage implements VideoStorage {
         await handle.close();
       }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new StorageError("MISSING_PART", 409);
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        throw new StorageError("MISSING_PART", 409);
       throw error;
     }
   }
@@ -346,7 +606,12 @@ export class LocalVideoStorage implements VideoStorage {
     try {
       for (const name of await readdir(dir)) {
         if (!name.endsWith(".json")) continue;
-        const state = JSON.parse(await readFile(path.join(dir, name), "utf8")) as UploadState;
+        const state = JSON.parse(
+          await readFile(
+            await this.target(`${this.partsRoot(key)}/${name}`),
+            "utf8",
+          ),
+        ) as UploadState;
         if (state.status === "complete") return state.contentType;
       }
     } catch (error) {
@@ -355,30 +620,62 @@ export class LocalVideoStorage implements VideoStorage {
     return undefined;
   }
 
-  async openRange(key: string, rangeHeader: string | null): Promise<{ stream: ReturnType<typeof createReadStream>; start: number; end: number; size: number; contentType?: string; partial: boolean }> {
+  async openRange(
+    key: string,
+    rangeHeader: string | null,
+  ): Promise<{
+    stream: ReturnType<typeof createReadStream>;
+    start: number;
+    end: number;
+    size: number;
+    contentType?: string;
+    partial: boolean;
+  }> {
     const object = await this.target(key);
     let size: number;
-    try { size = (await stat(object)).size; } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new StorageError("OBJECT_NOT_FOUND", 404);
+    try {
+      const metadata = await stat(object);
+      if (!metadata.isFile()) throw new StorageError("OBJECT_NOT_FOUND", 404);
+      size = metadata.size;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        throw new StorageError("OBJECT_NOT_FOUND", 404);
       throw error;
     }
-    let start = 0, end = Math.max(0, size - 1), partial = false;
+    let start = 0,
+      end = Math.max(0, size - 1),
+      partial = false;
     if (rangeHeader) {
       const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
-      if (!match || (!match[1] && !match[2])) throw new StorageError("RANGE_NOT_SATISFIABLE", 416);
+      if (!match || (!match[1] && !match[2]))
+        throw new StorageError("RANGE_NOT_SATISFIABLE", 416, size);
       partial = true;
       if (!match[1]) {
         const length = Number(match[2]);
-        if (!Number.isSafeInteger(length) || length < 1) throw new StorageError("RANGE_NOT_SATISFIABLE", 416);
+        if (!Number.isSafeInteger(length) || length < 1)
+          throw new StorageError("RANGE_NOT_SATISFIABLE", 416, size);
         start = Math.max(0, size - length);
       } else {
         start = Number(match[1]);
         end = match[2] ? Number(match[2]) : end;
       }
-      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || start >= size || end < start)
-        throw new StorageError("RANGE_NOT_SATISFIABLE", 416);
+      if (
+        !Number.isSafeInteger(start) ||
+        !Number.isSafeInteger(end) ||
+        start < 0 ||
+        start >= size ||
+        end < start
+      )
+        throw new StorageError("RANGE_NOT_SATISFIABLE", 416, size);
       end = Math.min(end, size - 1);
     }
-    return { stream: createReadStream(object, { start, end }), start, end, size, contentType: await this.contentTypeFor(key), partial };
+    return {
+      stream: createReadStream(object, { start, end }),
+      start,
+      end,
+      size,
+      contentType: await this.contentTypeFor(key),
+      partial,
+    };
   }
 }
