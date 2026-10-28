@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, RootModel
 
 from netsense_runner.clients.convex_worker import ConvexWorkerClient
@@ -46,8 +48,13 @@ class OpenResponse(RootModel[list[OpenSandbox]]):
     pass
 
 
+class ControlResponse(ContractModel):
+    decision: Literal["continue", "stopped", "terminal", "superseded", "missing"]
+
+
 class Service:
     def __init__(self, origin: str, secret: str) -> None:
+        self.origin = origin
         self.transport = ConvexWorkerClient(origin, secret, timeout_s=5)
 
     def claim(self, owner: str) -> Claim | None:
@@ -85,6 +92,14 @@ class Service:
                 "errorCode": "INFRA_EXEC",
             },
             OkResponse,
+        )
+
+    def control(self, job_id: str, owner: str, attempt: int) -> ControlResponse:
+        return self.transport._request(
+            "POST",
+            "/svc/jobs/control",
+            {"jobId": job_id, "leaseOwner": owner, "expectedAttempt": attempt},
+            ControlResponse,
         )
 
     def stale(self) -> list[StaleJob]:

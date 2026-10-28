@@ -677,7 +677,7 @@ returns `400 {error:"INVALID_REQUEST"}`; other rejected operations expose only
 service configuration returns `503 {error:"SERVICE_UNAVAILABLE"}`. Responses use
 `Cache-Control: no-store`; no upload path logs payloads, identities or URLs.
 
-The local slice accepts integer `bytesTotal` in 1..5 GiB and MIME `video/mp4`,
+The local slice accepts integer `bytesTotal` in 1..2 GiB and MIME `video/mp4`,
 `video/quicktime`, or `video/webm`. SHA-256 is lowercase 64 hex. `fileName` is
 validated as a nonempty string <=1024 characters and never used as a storage key.
 Parts are 8 MiB except the final remainder; signing accepts 1..32 unique part
@@ -1133,3 +1133,58 @@ missing-moment policy in the DAG remain unchanged; a new subject-retrack job can
 read prior completed immutable artifacts. Paid recovery, stage retries,
 remark-retrack, finalize approval snapshots, and live Modal/Convex/R2 behavior
 remain PARTIAL / UNTESTED.
+
+### Local runtime corrective boundaries (PR20)
+
+The private authenticated `POST /svc/jobs/control` accepts exactly
+`{jobId, leaseOwner, expectedAttempt}` and returns exactly `{decision}`. Its closed
+values are `continue`, `stopped`, `terminal`, `superseded`, `missing`. A single
+mutation checks the current job, owner/attempt, status, lease and heartbeat.
+`continue` means the owned worker must remain alive; `stopped` means that exact
+running attempt was atomically failed with `INFRA_EXEC` before termination.
+`terminal`, `superseded` and `missing` authorize releasing only the caller's live
+owned handle, without mutating a successor. A missing/invalid/unavailable response
+never authorizes stale termination; the independent guardian lifetime remains.
+Existing `/svc/jobs/fail` and other `OkResponse` consumers retain exactly `{ok:true}`.
+Every observed runner exit, including zero without `/worker/done`, still calls
+guarded failure using the immutable original claim tuple. Owner mismatch refuses
+acquisition before any start or failure mutation.
+
+Local watch and runner heartbeat use `HEARTBEAT_S` (default 15, range 1–60 s;
+runner also requires less than the pinned lease). Queue polling uses
+`ORCH_POLL_INTERVAL_MS` (default 2000, range 100–60000 ms), reconciliation uses
+`SWEEPER_INTERVAL_S` (default 180, range 1–86400 s). Values must be finite. Owned
+process waits remain bounded at 0.2 s; authenticated control calls run only at the
+watch interval, with a five-second HTTP deadline. Sweeps also run during long
+jobs. There is no global stale-list failure policy in this local runtime: startup
+reconciliation may fail only an exact journaled claim after confirmed local death.
+Known live owned workers observe external terminal/cancel/supersede through fresh
+control transactions, even though those jobs disappear from the stale list.
+
+Reconciliation serializes each shared state directory with a cross-process flock;
+journal writes use unique atomic temporary files. Environment and service origin,
+canonical UUID/filename, local driver and matching job/name constrain receipt
+reconciliation. Journal reads are bounded, regular-file and no-follow. Corrupt or
+foreign journals stay pending and cannot prevent other deliveries. Unscoped older
+journals need diagnosis; they do not authorize cross-environment recovery. Release
+response loss retries the same immutable receipt tuple. No persisted PID is used.
+
+The trusted scoped local artifact boundary answers cached-object existence using
+regular-file metadata, without first requesting a signed GET for a missing file.
+Other I/O/auth/outage errors propagate. Cache bytes still traverse actual signing
+and media GET for validation. Unchanged segments are reused. A completely
+downloaded segment that fails validation can be quarantined only if its current
+inode/size/modification identity matches the observed file, under a directory
+flock. Quarantined corrupt derived media remains local for diagnosis; rebuilding
+uses normal atomic immutable publication. JSON artifacts are never quarantined or
+overwritten. JSON reads/writes cap at 1 MiB, reject nonregular/symlink replay targets,
+and share the caller's actual stage deadline. Media segments remain streamed with
+the separate 2 GiB transport cap. Expired budgets reject without a positive clamp.
+The executable local host rejects a declared source above 2 GiB before stage/media
+work. Both Next upload admission and private `uploads.reserve` reject above
+2 GiB before storage/media work (§10.2). This cap is specific to the executable
+local implementation; larger-file support is unsupported / UNTESTED.
+
+Automatic requeue remains disabled; incomplete attempts and prior-budget recovery
+remain partial. T1.09/T1.11 and full browser E2E/vendor behavior remain partial /
+UNTESTED as stated above.

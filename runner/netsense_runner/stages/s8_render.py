@@ -7,7 +7,7 @@ import math
 import shutil
 import tempfile
 from bisect import bisect_left, bisect_right
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -83,8 +83,10 @@ class RenderWorker:
         tool: ToolRunner | None = None,
         object_exists: ObjectExists | None = None,
         font_path: str | None = None,
+        reject_cache: Callable[[str], None] | None = None,
     ) -> None:
         self._font_path = font_path
+        self._reject_cache = reject_cache
         self._download, self._track_loader, self._tool, self._exists = (
             download,
             track_loader,
@@ -419,10 +421,15 @@ class RenderWorker:
             local = work / f"segment-{index}.mp4"
             remaining_timeout(ctx.deadline_monotonic)
             reusable = False
-            if cached and self._exists(cached, timeout_s=remaining_timeout(ctx.deadline_monotonic)):
+            cache_exists = bool(
+                cached and self._exists(cached, timeout_s=remaining_timeout(ctx.deadline_monotonic))
+            )
+            cache_downloaded = False
+            if cached and cache_exists:
                 remaining_timeout(ctx.deadline_monotonic)
                 try:
                     self._download_to(ctx.storage.get_url(cached), local, ctx.deadline_monotonic)
+                    cache_downloaded = True
                     cached_data = json.loads(
                         run_tool(
                             self._tool,
@@ -481,6 +488,9 @@ class RenderWorker:
                 except (OSError, ValueError, KeyError):
                     pass
             if not reusable:
+                if cached and cache_downloaded and self._reject_cache is not None:
+                    remaining_timeout(ctx.deadline_monotonic)
+                    self._reject_cache(cached)
                 clip = self._annotated(source, work, annotations, tracks, fps, segment, ctx)
                 self._put(ctx, key, clip, "video/mp4")
                 clip.replace(local)

@@ -85,6 +85,7 @@ test("local orchestrator executes subprocess DAG over HTTP with probeable real o
     });
   });
   const errors: string[] = [];
+  let replayToken = "";
   const server = createServer(async (incoming, outgoing) => {
     try {
       const chunks: Buffer[] = [];
@@ -117,7 +118,10 @@ test("local orchestrator executes subprocess DAG over HTTP with probeable real o
           `${incoming.url?.split("?")[0]}:${response.status}:${incoming.url?.endsWith("/target") ? (JSON.parse(Buffer.concat(chunks).toString()).output.anchorFrameMs === undefined ? "remark" : "anchor") : ""}`,
         );
       outgoing.writeHead(response.status, Object.fromEntries(response.headers));
-      outgoing.end(Buffer.from(await response.arrayBuffer()));
+      const responseBytes = Buffer.from(await response.arrayBuffer());
+      if (incoming.url === "/svc/jobs/claim" && response.status === 200)
+        replayToken = JSON.parse(responseBytes.toString()).jobToken;
+      outgoing.end(responseBytes);
     } catch {
       errors.push("BRIDGE_FAILED");
       outgoing.writeHead(500).end();
@@ -221,6 +225,72 @@ test("local orchestrator executes subprocess DAG over HTTP with probeable real o
         ),
       ).toBe(true);
     }
+    const remarks = await c.t.run((ctx) => ctx.db.query("remarks").collect());
+    const render = await c.t.run((ctx) => ctx.db.query("renders").first());
+    if (!render) throw Error("render missing");
+    await writeFile(
+      path.join(root, "replay.json"),
+      JSON.stringify({
+        kind: "preview",
+        mode: "video",
+        durationMs: 3000,
+        proxyKey: `sessions/${c.sessionId}/proxy.mp4`,
+        annotations: annotations.map((a) => ({
+          annotationId: a._id,
+          keyframeMs: remarks.find((r) => r.remarkId === a.remarkId)
+            ?.keyframeMs,
+          markType: a.markType,
+          anchor: a.anchor,
+          arrowFrom: a.arrowFrom ?? null,
+          startMs: a.startMs,
+          endMs: a.endMs,
+          labelText: a.labelText,
+          placedBy: a.placedBy,
+          trackFileRef: tracks.find((t) => t.trackId === a.trackId)?.fileRef,
+        })),
+        previousSegments: render.segmentRefs,
+      }),
+    );
+    // Reauthorize only this test's completed attempt for storage replay; no auto-requeue.
+    await c.t.run((ctx) =>
+      ctx.db.patch(c.jobId, {
+        status: "running",
+        leaseUntil: Date.now() + 120000,
+      }),
+    );
+    const replay = spawn(
+      "uv",
+      [
+        "run",
+        "--project",
+        "services/orchestrator",
+        "python",
+        "fixtures/synthetic/local_driver/storage_replay.py",
+      ],
+      {
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          PATH: process.env.PATH,
+          NETSENSE_ARTIFACT_ROOT: root,
+          NETSENSE_SESSION: c.sessionId,
+          NETSENSE_JOB_TOKEN: replayToken,
+          CONVEX_SITE_URL: origin,
+          VM_API_BASE_URL: origin,
+        },
+      },
+    );
+    const replayStatus = await new Promise<number | null>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        replay.kill();
+        reject(Error("cache replay deadline"));
+      }, 30000);
+      replay.on("exit", (code) => {
+        clearTimeout(timer);
+        resolve(code);
+      });
+    });
+    expect(replayStatus).toBe(0);
+    expect(errors).toEqual([]);
     for (const annotation of annotations) {
       const still = await readFile(
         path.join(root, `sessions/${c.sessionId}/stills/${annotation._id}.jpg`),
@@ -234,3 +304,164 @@ test("local orchestrator executes subprocess DAG over HTTP with probeable real o
     await rm(root, { recursive: true, force: true });
   }
 }, 60000);
+
+for (const mode of [
+  "refresh",
+  "stale",
+  "cancelled",
+  "external-fail",
+  "superseded",
+] as const) {
+  test(`actual HTTP owned process control: ${mode}`, async () => {
+    const c = await ready();
+    await mkdir(".orca-scratch", { recursive: true });
+    const root = await mkdtemp(path.resolve(".orca-scratch/control-"));
+    const service = randomBytes(32).toString("base64url");
+    vi.stubEnv("CONVEX_SERVICE_SECRET", service);
+    vi.stubEnv("WORKER_TOKEN_SECRET", randomBytes(32).toString("base64url"));
+    let controls = 0;
+    const decisions: string[] = [];
+    const errors: string[] = [];
+    const server = createServer(async (incoming, outgoing) => {
+      try {
+        const chunks: Buffer[] = [];
+        for await (const chunk of incoming) chunks.push(Buffer.from(chunk));
+        if (incoming.url === "/svc/jobs/control") {
+          controls++;
+          if (controls === 1) {
+            await c.t.run((ctx) => ctx.db.patch(c.jobId, { heartbeatAt: 0 }));
+            const stale = await c.t.fetch("/svc/jobs/stale", {
+              headers: { Authorization: `Bearer ${service}` },
+            });
+            expect(
+              (await stale.json()).some(
+                (r: { _id: string }) => r._id === c.jobId,
+              ),
+            ).toBe(true);
+          }
+          if (mode === "refresh") {
+            // A stale observation precedes the heartbeat transaction, then control.
+            await c.t.run((ctx) =>
+              ctx.db.patch(
+                c.jobId,
+                controls < 3
+                  ? { heartbeatAt: Date.now(), leaseUntil: Date.now() + 60000 }
+                  : { status: "cancelled" },
+              ),
+            );
+            if (controls === 3) {
+              const { readdir } = await import("node:fs/promises");
+              expect(
+                (await readdir(path.join(root, "state"))).some((f) =>
+                  f.endsWith(".released.json"),
+                ),
+              ).toBe(false);
+              expect(await readFile(path.join(root, "pid"), "utf8")).toMatch(
+                /^\d+/,
+              );
+            }
+          } else if (mode === "external-fail") {
+            const failed = await c.t.fetch("/svc/jobs/fail", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${service}` },
+              body: JSON.stringify({ jobId: c.jobId, errorCode: "INFRA_EXEC" }),
+            });
+            expect(failed.status).toBe(200);
+          } else if (mode === "cancelled") {
+            await c.t.run((ctx) =>
+              ctx.db.patch(c.jobId, { status: "cancelled" }),
+            );
+          } else if (mode === "superseded") {
+            await c.t.run((ctx) =>
+              ctx.db.patch(c.jobId, { leaseOwner: "successor", attempt: 2 }),
+            );
+          }
+        }
+        const response = await c.t.fetch(incoming.url!, {
+          method: incoming.method,
+          headers: incoming.headers as Record<string, string>,
+          ...(incoming.method === "GET" ? {} : { body: Buffer.concat(chunks) }),
+        });
+        const bytes = Buffer.from(await response.arrayBuffer());
+        if (incoming.url === "/svc/jobs/control")
+          decisions.push(JSON.parse(bytes.toString()).decision);
+        if (response.status >= 400) errors.push("HTTP_REJECTED");
+        outgoing.writeHead(
+          response.status,
+          Object.fromEntries(response.headers),
+        );
+        outgoing.end(bytes);
+      } catch {
+        errors.push("BRIDGE_FAILED");
+        outgoing.writeHead(500).end();
+      }
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    try {
+      const started = Date.now();
+      const child = spawn(
+        "uv",
+        [
+          "run",
+          "--project",
+          "services/orchestrator",
+          "python",
+          "fixtures/synthetic/local_driver/control_http.py",
+        ],
+        {
+          stdio: ["ignore", "pipe", "pipe"],
+          env: {
+            PATH: process.env.PATH,
+            CONVEX_SITE_URL: origin,
+            CONVEX_SERVICE_SECRET: service,
+            NETSENSE_ENV: "test",
+            NETSENSE_LOCAL_STATE_DIR: path.join(root, "state"),
+          },
+        },
+      );
+      const status = await new Promise<number | null>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          child.kill();
+          reject(Error("control deadline"));
+        }, 15000);
+        child.on("exit", (code) => {
+          clearTimeout(timer);
+          resolve(code);
+        });
+      });
+      expect(errors).toEqual([]);
+      expect(status).toBe(0);
+      expect(Date.now() - started).toBeLessThan(5000);
+      expect(decisions).toEqual(
+        mode === "refresh"
+          ? ["continue", "continue", "terminal"]
+          : [
+              mode === "stale"
+                ? "stopped"
+                : mode === "cancelled" || mode === "external-fail"
+                  ? "terminal"
+                  : "superseded",
+            ],
+      );
+      const job = await c.t.run((ctx) => ctx.db.get(c.jobId));
+      expect(job?.status).toBe(
+        mode === "stale" || mode === "external-fail"
+          ? "failed"
+          : mode === "superseded"
+            ? "running"
+            : "cancelled",
+      );
+      if (mode === "superseded") expect(job?.attempt).toBe(2);
+      const rows = await c.t.run((ctx) => ctx.db.query("sandboxes").collect());
+      expect(rows).toHaveLength(1);
+      expect(rows[0].terminatedAt).toBeTypeOf("number");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      vi.unstubAllEnvs();
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 20000);
+}

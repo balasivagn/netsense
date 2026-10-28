@@ -89,6 +89,7 @@ const serviceRoutes = [
   "/svc/jobs/sandbox",
   "/svc/jobs/released",
   "/svc/jobs/fail",
+  "/svc/jobs/control",
   "/svc/jobs/stale",
   "/svc/sandboxes/open",
 ];
@@ -1128,4 +1129,41 @@ test("guarded sandbox registration rejects a changed claim owner", async () => {
   expect(await c.t.run((ctx) => ctx.db.query("sandboxes").collect())).toEqual(
     [],
   );
+});
+
+test("owned control returns closed transactional decisions after heartbeat refresh", async () => {
+  const c = await running();
+  const input = {
+    jobId: c.jobId,
+    leaseOwner: c.claimed.job.leaseOwner,
+    expectedAttempt: c.claimed.job.attempt,
+  };
+  const control = async () =>
+    (await c.t.fetch("/svc/jobs/control", post(input))).json();
+  await c.t.run((ctx) => ctx.db.patch(c.jobId, { heartbeatAt: 0 }));
+  const snapshot = await c.t.fetch("/svc/jobs/stale", {
+    headers: { Authorization: `Bearer ${process.env.CONVEX_SERVICE_SECRET}` },
+  });
+  expect(
+    (await snapshot.json()).some((j: { _id: string }) => j._id === c.jobId),
+  ).toBe(true);
+  await c.t.run((ctx) =>
+    ctx.db.patch(c.jobId, {
+      heartbeatAt: Date.now(),
+      leaseUntil: Date.now() + 60000,
+    }),
+  );
+  expect(await control()).toEqual({ decision: "continue" });
+  expect((await c.t.run((ctx) => ctx.db.get(c.jobId)))?.status).toBe("running");
+  await c.t.run((ctx) =>
+    ctx.db.patch(c.jobId, { leaseOwner: "successor", heartbeatAt: 0 }),
+  );
+  expect(await control()).toEqual({ decision: "superseded" });
+  expect((await c.t.run((ctx) => ctx.db.get(c.jobId)))?.status).toBe("running");
+  await c.t.run((ctx) =>
+    ctx.db.patch(c.jobId, { leaseOwner: input.leaseOwner }),
+  );
+  expect(await control()).toEqual({ decision: "stopped" });
+  expect((await c.t.run((ctx) => ctx.db.get(c.jobId)))?.status).toBe("failed");
+  expect(await control()).toEqual({ decision: "terminal" });
 });

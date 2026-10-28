@@ -167,6 +167,16 @@ post("/svc/jobs/released", "service", async (ctx, input) => {
   );
   return { ok: true };
 });
+post("/svc/jobs/control", "service", async (ctx, input) =>
+  ctx.runMutation(
+    internal.svc.control,
+    object(input, {
+      jobId: id("jobs"),
+      leaseOwner: string,
+      expectedAttempt: integer,
+    }),
+  ),
+);
 post("/svc/jobs/fail", "service", async (ctx, input) => {
   await ctx.runMutation(
     internal.svc.fail,

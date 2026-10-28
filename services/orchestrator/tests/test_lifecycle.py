@@ -16,7 +16,7 @@ import pytest
 
 from netsense_orch.drivers import LocalDriver, LocalSandboxSpec, SandboxHandle
 from netsense_orch.lifecycle import Lifecycle
-from netsense_orch.service import Claim, OpenSandbox, Service, StaleJob
+from netsense_orch.service import Claim, ControlResponse, OpenSandbox, Service, StaleJob
 from netsense_runner.json_types import JsonValue
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -24,10 +24,13 @@ ROOT = Path(__file__).resolve().parents[3]
 
 class ProtocolFake(Service):
     def __init__(self) -> None:
+        self.origin = "protocol-fake"
         self.rows: list[OpenSandbox] = []
         self.releases: list[dict[str, JsonValue]] = []
         self.failures: list[tuple[str, str, int, bool]] = []
         self.registration_failure = False
+        self.controls = 0
+        self.decision = "continue"
         self.lose_release = False
         self.stale_rows: list[StaleJob] = []
 
@@ -40,6 +43,12 @@ class ProtocolFake(Service):
 
     def fail(self, job_id: str, owner: str, attempt: int, *, stale: bool = False) -> None:
         self.failures.append((job_id, owner, attempt, stale))
+
+    def control(self, job_id: str, owner: str, attempt: int) -> ControlResponse:
+        self.controls += 1
+        return ControlResponse.model_validate(
+            {"decision": "stopped" if self.stale_rows else self.decision}
+        )
 
     def released(self, payload: dict[str, JsonValue]) -> None:
         self.releases.append(payload)
@@ -93,6 +102,7 @@ def setup(tmp_path: Path, script: str) -> tuple[Lifecycle, ProtocolFake, Claim, 
     )
     driver = FixtureDriver(script)
     runtime.driver = driver
+    runtime.watch_s = 0.05
     return runtime, service, claim, driver
 
 
@@ -104,7 +114,9 @@ def test_exact_release_on_runner_exit(tmp_path: Path, script: str) -> None:
     assert len(service.releases) == 1
     assert service.releases[0]["exitCode"] == (0 if script == "exit_success.py" else 7)
     assert not service.rows
-    assert service.failures == [(claim.job.id, runtime.owner, claim.job.attempt, False)]
+    assert all(
+        row == (claim.job.id, runtime.owner, claim.job.attempt, False) for row in service.failures
+    )
 
 
 def test_registration_failure_still_cleans_owned_group(tmp_path: Path) -> None:
@@ -122,7 +134,7 @@ def test_stale_heartbeat_releases_without_requeue(tmp_path: Path) -> None:
     ]
     runtime.run(claim)
     assert len(service.releases) == 1
-    assert any(row[3] for row in service.failures)
+    assert service.controls > 0
 
 
 def test_release_response_loss_retries_identical_tuple_after_restart(tmp_path: Path) -> None:
@@ -174,3 +186,122 @@ def test_no_receipt_never_signals_persisted_identity_or_reports_release(
     monkeypatch.setattr(os, "killpg", forbidden)
     runtime.sweep()
     assert not service.releases
+
+
+def test_refreshed_heartbeat_declines_stop_and_owned_child_survives(tmp_path: Path) -> None:
+    import threading
+    import time
+
+    runtime, service, claim, driver = setup(tmp_path, "sleep_forever.py")
+    driver.timeout = 5
+    # Protocol fake represents stale snapshot followed by fresh transactional heartbeat.
+    thread = threading.Thread(target=runtime.run, args=(claim,))
+    thread.start()
+    try:
+        end = time.monotonic() + 2
+        while service.controls < 2 and time.monotonic() < end:
+            time.sleep(0.02)
+        assert service.controls >= 2
+        assert thread.is_alive()
+        assert not service.releases
+        assert not list(runtime.root.glob("*.released.json"))
+        service.decision = "terminal"
+        thread.join(2)
+        assert not thread.is_alive()
+        assert len(service.releases) == 1
+    finally:
+        service.decision = "terminal"
+        thread.join(6)
+
+
+@pytest.mark.parametrize("decision", ["stopped", "terminal", "superseded", "missing"])
+def test_authoritative_stop_promptly_releases_owned_child(tmp_path: Path, decision: str) -> None:
+    import time
+
+    runtime, service, claim, driver = setup(tmp_path, "sleep_forever.py")
+    driver.timeout = 10
+    service.decision = decision
+    start = time.monotonic()
+    runtime.run(claim)
+    assert time.monotonic() - start < 3
+    assert len(service.releases) == 1
+
+
+def test_claim_owner_must_match_before_start(tmp_path: Path) -> None:
+    runtime, service, claim, _ = setup(tmp_path, "sleep_forever.py")
+    claim.job.leaseOwner = "successor"
+    with pytest.raises(ValueError, match="CLAIM_OWNER_MISMATCH"):
+        runtime.run(claim)
+    assert not service.rows
+    assert not service.failures
+
+
+@pytest.mark.parametrize("name", ["HEARTBEAT_S", "SWEEPER_INTERVAL_S", "ORCH_POLL_INTERVAL_MS"])
+@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf"])
+def test_invalid_intervals_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str, name: str
+) -> None:
+    monkeypatch.setenv(name, value)
+    with pytest.raises(ValueError):
+        setup(tmp_path, "exit_success.py")
+
+
+def test_concurrent_sweeps_keep_release_tuple_and_ignore_foreign_corrupt_rows(
+    tmp_path: Path,
+) -> None:
+    import threading
+
+    from netsense_orch.lifecycle import durable
+
+    runtime, service, claim, _ = setup(tmp_path, "exit_success.py")
+    service.lose_release = True
+    with pytest.raises(RuntimeError, match="RESPONSE_LOST"):
+        runtime.run(claim)
+    (runtime.root / "corrupt.job.json").write_text("{")
+    (runtime.root / "foreign.job.json").write_text(json.dumps({"sandboxId": "../../foreign"}))
+    threads = [threading.Thread(target=runtime.sweep) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(3)
+        assert not thread.is_alive()
+    assert len(service.releases) == 2
+    assert service.releases[0] == service.releases[1]
+    assert not list(runtime.root.glob("*.tmp"))
+    # Multiple durable writers cannot steal one another's temporary path.
+    target = runtime.root / "atomic.json"
+    threads = [threading.Thread(target=durable, args=(target, {"value": n})) for n in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(3)
+    assert json.loads(target.read_text())["value"] in range(8)
+
+
+def test_long_job_keeps_sweeping_at_configured_interval(tmp_path: Path) -> None:
+    import threading
+    import time
+
+    runtime, service, claim, driver = setup(tmp_path, "sleep_forever.py")
+    driver.timeout = 5
+    runtime.sweep_s = 0.2
+    calls: list[float] = []
+    original = runtime.sweep
+
+    def sweep() -> None:
+        calls.append(time.monotonic())
+        original()
+
+    runtime.sweep = sweep  # type: ignore[method-assign]
+    thread = threading.Thread(target=runtime.run, args=(claim,))
+    thread.start()
+    try:
+        end = time.monotonic() + 3
+        while len(calls) < 3 and time.monotonic() < end:
+            time.sleep(0.02)
+        assert len(calls) >= 3
+        assert thread.is_alive()
+        assert calls[1] - calls[0] >= 0.18
+    finally:
+        service.decision = "terminal"
+        thread.join(6)

@@ -146,3 +146,97 @@ def test_media_total_deadline_bytes_redirect_expiry_and_missing(
     source = tmp_path / "put"
     source.write_bytes(b"x" * 100)
     storage._transfer(url("/ok"), "PUT", source, 1, 100, "application/octet-stream")
+
+
+def test_json_reads_and_replay_reject_large_nonregular_and_symlink(tmp_path: Path) -> None:
+    import os
+
+    store = LocalArtifacts(tmp_path, "session")
+    key = "sessions/session/runs/run.json"
+    store.put_new(key, b"{}", "application/json")
+    path = tmp_path / key
+    with path.open("wb") as output:
+        output.truncate(2 * 1024**3)
+    with pytest.raises(ValueError, match="ARTIFACT_TOO_LARGE"):
+        store.read(key)
+    path.unlink()
+    os.mkfifo(path)
+    with pytest.raises(ValueError, match="INVALID_ARTIFACT"):
+        store.put_new(key, b"{}", "application/json")
+    with pytest.raises(ValueError, match="INVALID_ARTIFACT"):
+        store.read(key)
+    path.unlink()
+    path.symlink_to(tmp_path / "other")
+    with pytest.raises(OSError):
+        store.put_new(key, b"{}", "application/json")
+
+
+def test_owned_exists_and_expired_budget_never_signs(tmp_path: Path) -> None:
+    import secrets
+    import time
+
+    from netsense_runner.host_storage import HttpStorage
+
+    store = LocalArtifacts(tmp_path, "session")
+    storage = HttpStorage(
+        "http://127.0.0.1:1", secrets.token_urlsafe(32), "session", tmp_path / "scratch", store
+    )
+    key = "sessions/session/renders/preview/s0-" + "a" * 64 + ".mp4"
+    assert not storage.exists(key, timeout_s=1)
+    path = tmp_path / key
+    path.write_bytes(b"media")
+    assert storage.exists(key, timeout_s=1)
+    storage.deadline.value = time.monotonic() - 1
+    with pytest.raises(TimeoutError):
+        storage.exists(key, timeout_s=1)
+    with pytest.raises(TimeoutError):
+        storage.load(key, timeout_s=1)
+    with pytest.raises(TimeoutError):
+        list(storage.download("http://127.0.0.1:1", timeout_s=-1, max_bytes=100))
+
+
+def test_cache_quarantine_checks_observed_identity(tmp_path: Path) -> None:
+    import time
+
+    store = LocalArtifacts(tmp_path, "session")
+    key = "sessions/session/renders/preview/s0-" + "a" * 64 + ".mp4"
+    source = tmp_path / "source"
+    source.write_bytes(b"media")
+    store.put_path(key, source, deadline=time.monotonic() + 1)
+    assert store.exists(key, deadline=time.monotonic() + 1)
+    path = tmp_path / key
+    path.unlink()
+    path.write_bytes(b"different")
+    with pytest.raises(ValueError, match="CACHE_CHANGED"):
+        store.reject_cache(key)
+    assert path.read_bytes() == b"different"
+
+
+def test_host_refuses_oversized_source_before_media_work(monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    from netsense_runner.clients.convex_worker import ConvexWorkerClient
+    from netsense_runner.clients.worker_wire import WorkerJobResponse
+    from netsense_runner.host import build_runner
+
+    projection = json.loads(
+        (
+            Path(__file__).resolve().parents[2]
+            / "fixtures/synthetic/worker_http/job-projection.json"
+        ).read_text()
+    )
+    projection["config"] = json.loads(
+        (Path(__file__).resolve().parents[2] / "config/pipeline_config.v1.json").read_text()
+    )
+    projection["job"]["attempt"] = 1
+    projection["inputs"]["declaredBytes"] = 2 * 1024**3 + 1
+    job = WorkerJobResponse.model_validate(projection)
+    monkeypatch.setattr(ConvexWorkerClient, "get_job", lambda self: job)
+    monkeypatch.setenv("NETSENSE_ENV", "test")
+    monkeypatch.setenv("NETSENSE_LOCAL_FAKE", "1")
+    monkeypatch.setenv("CONVEX_SITE_URL", "http://127.0.0.1:1")
+    import secrets
+
+    monkeypatch.setenv("NETSENSE_JOB_TOKEN", secrets.token_urlsafe(32))
+    with pytest.raises(ValueError, match="LOCAL_SOURCE_TOO_LARGE"):
+        build_runner(job.job.id)

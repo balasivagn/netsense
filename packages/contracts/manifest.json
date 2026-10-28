@@ -19,7 +19,7 @@
     },
     {
       "path": "convex/http.ts",
-      "sha256": "6792c280474366438d23ab1e1677f4be40cddfb18128d4e7aae29eda8a41c6be"
+      "sha256": "c611423636dded44c38eb6efa0e45960efd11fb7462f18949cc75a80423299f3"
     },
     {
       "path": "convex/jobs.ts",
@@ -55,7 +55,7 @@
     },
     {
       "path": "convex/uploads.ts",
-      "sha256": "e8d13bda54c89ad6a7a8dfcf1cba9eebbc0aa731d4016ddc37d1188fefc5f5cb"
+      "sha256": "1bdcbcccccde259482950c0e4fb3914c77dc3709d2ba74be31ccad8900226d17"
     },
     {
       "path": "convex/validators.ts",

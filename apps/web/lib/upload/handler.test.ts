@@ -148,7 +148,7 @@ test("actual routes: auth, ownership, consent never touches storage, closed inpu
     expect(
       (await h.call("init", { ...h.init, coachId: h.coachId })).status,
     ).toBe(409);
-    for (const bytesTotal of [0, -1, 1.5, 5 * 1024 ** 3 + 1])
+    for (const bytesTotal of [0, -1, 1.5, 2 * 1024 ** 3 + 1])
       expect(
         (await h.call("init", { ...h.init, bytesTotal })).status,
       ).toBeGreaterThanOrEqual(400);
@@ -586,6 +586,38 @@ test("abort reservation prevents completion while disk cleanup is still running"
     expect(await h.t.run((ctx) => ctx.db.query("jobs").collect())).toHaveLength(0);
   } finally {
     release();
+    await h.cleanup();
+  }
+});
+
+test("local 2 GiB metadata admission rejects larger sources before storage", async () => {
+  const h = await harness();
+  const storage = vi.spyOn(LocalVideoStorage.prototype, "initMultipart");
+  try {
+    await h.coach.mutation(api.sessions.confirmConsent, {
+      sessionId: h.sessionId,
+    });
+    const rejected = await h.call("init", {
+      ...h.init,
+      bytesTotal: 2 * 1024 ** 3 + 1,
+    });
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toEqual({ error: "INVALID_REQUEST" });
+    expect(storage).not.toHaveBeenCalled();
+    expect(h.fetcher).not.toHaveBeenCalled();
+    expect(await h.t.run((ctx) => ctx.db.query("uploads").collect())).toEqual(
+      [],
+    );
+    const accepted = await h.call("init", {
+      ...h.init,
+      bytesTotal: 2 * 1024 ** 3,
+    });
+    expect(accepted.status).toBe(200);
+    const rows = await h.t.run((ctx) => ctx.db.query("uploads").collect());
+    expect(rows).toHaveLength(1);
+    expect(rows[0].bytesTotal).toBe(2 * 1024 ** 3);
+    expect(storage).toHaveBeenCalledTimes(1);
+  } finally {
     await h.cleanup();
   }
 });

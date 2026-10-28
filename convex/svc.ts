@@ -161,3 +161,44 @@ export const openSandboxes = internalQuery({
       .withIndex("by_terminatedAt", (q) => q.eq("terminatedAt", undefined))
       .collect(),
 });
+
+// Private local owned-control transaction. Existing fail/OkResponse wire stays exact.
+export const control = internalMutation({
+  args: {
+    jobId: v.id("jobs"),
+    leaseOwner: v.string(),
+    expectedAttempt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) return { decision: "missing" as const };
+    if (
+      job.leaseOwner !== args.leaseOwner ||
+      job.attempt !== args.expectedAttempt
+    )
+      return { decision: "superseded" as const };
+    if (job.status !== "running") return { decision: "terminal" as const };
+    const currentSession = await ctx.db.get(job.sessionId);
+    if (currentSession?.latestJobId !== job._id)
+      return { decision: "superseded" as const };
+    const seconds = Number(process.env.HEARTBEAT_STALE_S ?? "90");
+    if (!Number.isFinite(seconds) || seconds <= 0)
+      throw Error("INVALID_STALE_SECONDS");
+    const now = Date.now();
+    if (
+      (job.leaseUntil ?? 0) > now &&
+      (job.heartbeatAt ?? 0) > now - seconds * 1000
+    )
+      return { decision: "continue" as const };
+    await ctx.db.patch(job._id, {
+      status: "failed",
+      errorCode: "INFRA_EXEC",
+      endedAt: now,
+      leaseUntil: undefined,
+    });
+    const session = await ctx.db.get(job.sessionId);
+    if (session?.latestJobId === job._id)
+      await ctx.db.patch(job.sessionId, { status: "failed" });
+    return { decision: "stopped" as const };
+  },
+});

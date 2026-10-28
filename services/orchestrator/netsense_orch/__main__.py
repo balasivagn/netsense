@@ -30,13 +30,15 @@ def main() -> int:
             Path.cwd(),
         )
         while True:
-            lifecycle.sweep()  # startup and periodic reconciliation, never auto-requeue.
+            if time.monotonic() >= lifecycle.next_sweep:
+                lifecycle.sweep()  # startup/periodic, including inside long-running jobs.
+                lifecycle.next_sweep = time.monotonic() + lifecycle.sweep_s
             claim = lifecycle.service.claim(lifecycle.owner)
             if claim:
                 lifecycle.run(claim)
             if args.once:
                 return 0
-            time.sleep(1)
+            time.sleep(lifecycle.poll_s)
     except KeyboardInterrupt:
         return 130
     except Exception:

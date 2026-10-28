@@ -140,7 +140,7 @@ export function uploadHandler(
         });
         if (
           a.bytesTotal < 1 ||
-          a.bytesTotal > 5 * 1024 ** 3 ||
+          a.bytesTotal > 2 * 1024 ** 3 ||
           !/^[a-f0-9]{64}$/.test(a.sha256) ||
           !["video/mp4", "video/quicktime", "video/webm"].includes(a.mimeType)
         )

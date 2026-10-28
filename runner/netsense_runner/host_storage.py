@@ -6,10 +6,12 @@ This is not an isolation boundary against hostile code sharing the host UID.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import math
 import os
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -44,9 +46,17 @@ class LocalArtifacts:
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", session):
             raise ValueError("INVALID_SESSION")
         self.root, self.session = root, session
+        self.deadline = threading.local()
+        self.cache_observations: dict[str, os.stat_result] = {}
+
+    def _check_deadline(self) -> None:
+        end = getattr(self.deadline, "value", None)
+        if end is not None and time.monotonic() >= end:
+            raise TimeoutError("ARTIFACT_TIMEOUT")
 
     @contextmanager
     def _parent(self, key: str) -> Iterator[tuple[int, str]]:
+        self._check_deadline()
         scoped(self.session, key)
         if not re.fullmatch(r"[A-Za-z0-9_./;-]+", key):
             raise ValueError("INVALID_KEY")
@@ -64,16 +74,60 @@ class LocalArtifacts:
         finally:
             os.close(fd)
 
+    def exists(self, key: str, *, deadline: float) -> bool:
+        if time.monotonic() >= deadline:
+            raise TimeoutError("MEDIA_TIMEOUT")
+        try:
+            with self._parent(key) as (fd, name):
+                file = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+                try:
+                    observed = os.fstat(file)
+                    self.cache_observations[key] = observed
+                    if not stat.S_ISREG(observed.st_mode):
+                        raise ValueError("INVALID_ARTIFACT")
+                finally:
+                    os.close(file)
+            if time.monotonic() >= deadline:
+                raise TimeoutError("MEDIA_TIMEOUT")
+            return True
+        except FileNotFoundError:
+            return False
+
+    def reject_cache(self, key: str) -> None:
+        # Only renderer-validated corrupt derived media, never immutable JSON.
+        if not re.fullmatch(r"sessions/[^/]+/renders/(preview|final)/[^/]+-[a-f0-9]{64}\.mp4", key):
+            raise ValueError("INVALID_CACHE_KEY")
+        observed = self.cache_observations.pop(key, None)
+        if observed is None:
+            raise ValueError("CACHE_NOT_OBSERVED")
+        with self._parent(key) as (fd, name):
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                current = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            except FileNotFoundError:
+                return
+            if not stat.S_ISREG(current.st_mode) or (
+                current.st_dev,
+                current.st_ino,
+                current.st_size,
+                current.st_mtime_ns,
+            ) != (observed.st_dev, observed.st_ino, observed.st_size, observed.st_mtime_ns):
+                raise ValueError("CACHE_CHANGED")
+            # Preserve evidence; new publication remains atomic and replay-checked.
+            os.rename(name, ".corrupt-" + uuid4().hex, src_dir_fd=fd, dst_dir_fd=fd)
+            os.fsync(fd)
+
     def read(self, key: str) -> bytes:
         with self._parent(key) as (fd, name):
             file = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
             with os.fdopen(file, "rb") as source:
-                import stat
-
                 if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
                     raise ValueError("INVALID_ARTIFACT")
-                data = source.read(2 * 1024**3 + 1)
-                if len(data) > 2 * 1024**3:
+                if os.fstat(source.fileno()).st_size > 1048576:
+                    raise ValueError("ARTIFACT_TOO_LARGE")
+                data = source.read(1048576 + 1)
+                self._check_deadline()
+                if len(data) > 1048576:
                     raise ValueError("ARTIFACT_TOO_LARGE")
                 return data
 
@@ -91,8 +145,10 @@ class LocalArtifacts:
                 try:
                     os.link(temp, name, src_dir_fd=fd, dst_dir_fd=fd, follow_symlinks=False)
                 except FileExistsError:
-                    existing = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
+                    existing = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
                     with os.fdopen(existing, "rb") as source:
+                        if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                            raise ValueError("INVALID_ARTIFACT")
                         if source.read(len(data) + 1) != data:
                             raise ValueError("IMMUTABLE_ARTIFACT") from None
                 os.fsync(fd)
@@ -100,6 +156,8 @@ class LocalArtifacts:
                 os.unlink(temp, dir_fd=fd)
 
     def put_path(self, key: str, path: Path, *, deadline: float) -> None:
+        if time.monotonic() >= deadline:
+            raise TimeoutError("ARTIFACT_LIMIT")
         with self._parent(key) as (fd, name):
             temp = ".write-" + uuid4().hex
             try:
@@ -116,8 +174,10 @@ class LocalArtifacts:
                 try:
                     os.link(temp, name, src_dir_fd=fd, dst_dir_fd=fd, follow_symlinks=False)
                 except FileExistsError:
-                    existing = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
+                    existing = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
                     with os.fdopen(existing, "rb") as a, path.open("rb") as b:
+                        if not stat.S_ISREG(os.fstat(a.fileno()).st_mode):
+                            raise ValueError("INVALID_ARTIFACT")
                         while True:
                             if time.monotonic() >= deadline:
                                 raise TimeoutError("ARTIFACT_LIMIT")
@@ -146,6 +206,8 @@ class HttpStorage:
         scratch.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.expiries: dict[str, int] = {}
         self.deadline = threading.local()
+        if artifacts is not None:
+            artifacts.deadline = self.deadline
 
     def remaining(self, default: float) -> float:
         end = getattr(self.deadline, "value", None)
@@ -241,26 +303,33 @@ class HttpStorage:
                     yield chunk
 
     def load(self, key: str, *, timeout_s: float = 20, max_bytes: int = 1048576) -> bytes:
-        deadline = time.monotonic() + timeout_s
+        deadline = time.monotonic() + self.remaining(timeout_s)
         url = self._sign(key, "get", timeout_s=timeout_s)
         return b"".join(
-            self.download(
-                url, timeout_s=max(0.001, deadline - time.monotonic()), max_bytes=max_bytes
-            )
+            self.download(url, timeout_s=deadline - time.monotonic(), max_bytes=max_bytes)
         )
 
     def exists(self, key: str, *, timeout_s: float) -> bool:
-        deadline = time.monotonic() + timeout_s
+        deadline = time.monotonic() + self.remaining(timeout_s)
+        if self.artifacts is not None:
+            # Trusted scoped local metadata boundary; missing signing is not a GET URL.
+            return self.artifacts.exists(key, deadline=deadline)
         try:
             url = self._sign(key, "get", timeout_s=timeout_s)
             # Bounded lookup by GET; full media validation remains the renderer's job.
             for _ in self.download(
-                url, timeout_s=max(0.001, deadline - time.monotonic()), max_bytes=2 * 1024**3
+                url, timeout_s=deadline - time.monotonic(), max_bytes=2 * 1024**3
             ):
                 pass
             return True
         except FileNotFoundError:
             return False
+
+    def reject_cache(self, key: str) -> None:
+        self.remaining(30)
+        if self.artifacts is None:
+            raise ValueError("IMMUTABLE_BOUNDARY_REQUIRED")
+        self.artifacts.reject_cache(key)
 
     def put_file(self, key: str, path: str, content_type: str) -> None:
         scoped(self.session, key)

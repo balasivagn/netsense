@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 from collections.abc import Mapping
 from pathlib import Path
@@ -61,6 +62,15 @@ def build_runner(job_id: str) -> Runner:
     if job.job.id != job_id or job.job.attempt != 1:
         # Non-done attempts/counters aren't projected. Never blindly resume them.
         raise ValueError("RECOVERY_PARTIAL")
+    if job.inputs.declaredBytes > 2 * 1024**3:
+        raise ValueError("LOCAL_SOURCE_TOO_LARGE")
+    heartbeat = float(os.environ.get("HEARTBEAT_S", "15"))
+    if (
+        not math.isfinite(heartbeat)
+        or not 1 <= heartbeat <= 60
+        or heartbeat >= job.config.limits.jobLeaseS
+    ):
+        raise ValueError("INVALID_HEARTBEAT_INTERVAL")
     artifacts = LocalArtifacts(Path(os.environ["NETSENSE_ARTIFACT_ROOT"]), job.job.sessionId)
     storage = HttpStorage(
         os.environ["VM_API_BASE_URL"],
@@ -107,7 +117,10 @@ def build_runner(job_id: str) -> Runner:
             )
         elif stage.stage == "render":
             renderer = RenderWorker(
-                download=storage.download, track_loader=storage.load, object_exists=storage.exists
+                download=storage.download,
+                track_loader=storage.load,
+                object_exists=storage.exists,
+                reject_cache=storage.reject_cache,
             )
             if (
                 stage.workerId != renderer.id
@@ -145,5 +158,5 @@ def build_runner(job_id: str) -> Runner:
         workers=workers,
         log=SafeLog(),
         cleanup=lambda: None,
-        heartbeat_interval=min(20, job.config.limits.jobLeaseS / 3),
+        heartbeat_interval=heartbeat,
     )

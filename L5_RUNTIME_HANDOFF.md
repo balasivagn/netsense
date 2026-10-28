@@ -1,8 +1,14 @@
 # L5 executable local runtime — T1.09 / T1.11 PARTIAL
 
-Base is exact reviewed `c2cea96518bd237db98fa984771c83d7d71d8212`;
-branch `lane/l5-local-runtime`. No subagents, other checkouts, paid calls, real-person
-media, web UI, upload backend edits, service provisioning or deployment.
+Correction starts exactly at parent-reviewed/pushed
+`796d7a3a86d025592a49ff67be8cd929b5135688`; PR20 remains on
+`lane/l5-local-runtime`. Parent integration remains separate and excludes PR20.
+No subagents, other checkouts, paid calls, real-person media, web UI, provisioning
+or deployment. Narrow authorized upload admission/reservation cap edits are included.
+Parent subsequently integrated browser uploader PR19 at
+`9411703396439b2c91206ec74c2bd8c053e457c4`; this branch excludes it. Its client
+files are untouched. **Parent must align PR19's current 5 GiB client validation
+with this local server/runtime 2 GiB cap when integrating.**
 
 ## Executable path and commands
 
@@ -16,7 +22,7 @@ uv run --project services/orchestrator python -m netsense_orch --once
 ```
 
 The first/third command claim at most one job. The second polls serially and runs
-startup/periodic reconciliation between jobs. The actual child command is the
+startup/periodic reconciliation between jobs and during long jobs. The actual child command is the
 orchestrator's Python executable followed by `-m netsense_runner --job <jobId>`.
 It runs in the same installed environment (orchestrator has an editable local
 runner dependency). `--once` exits after lifecycle/release processing; job failure
@@ -72,7 +78,19 @@ identical-byte replay only, and no-follow canonical session directory descriptor
 Hashed render segment files use streamed immutable publication/comparison at the
 same boundary. Full preview, JPEGs, proxy/audio/keyframes use signed HTTP PUT and
 retain their documented mutable semantics. No check-then-PUT immutability claim.
-No web upload/storage implementation was edited.
+The local upload admission handler and private Convex reservation both reject
+above 2 GiB, matching the host transport; metadata-only tests accept exactly
+2 GiB and reject 2 GiB + 1 before storage/DB writes. Larger-file support remains
+unsupported / UNTESTED. No browser upload client or public response shape changed.
+
+Cached-object existence uses the trusted scoped local regular-file boundary,
+avoiding a signer GET on missing objects. Existing cache bytes still traverse
+actual Next signing/media for validation. An observed, fully downloaded corrupt
+derived segment is quarantined under a directory flock only if its file identity
+is unchanged, then rebuilt with normal immutable publication. JSON artifacts
+remain immutable; reads/replay comparisons are bounded to 1 MiB, no-follow and
+regular-file checked. Artifact I/O shares the actual stage deadline; expired
+budgets reject without clamping. Segments retain streaming media limits.
 
 Private backwards-compatible service extensions (SPEC updated; normal generators
 run, no handwritten generated files):
@@ -83,6 +101,13 @@ run, no handwritten generated files):
   Staleness is rechecked atomically against fresh lease/heartbeat values using
   server `HEARTBEAT_STALE_S`. A stale snapshot cannot fail a refreshed or another
   owner's attempt. Legacy service clients retain their existing behavior.
+- `/svc/jobs/control`: required `{jobId, leaseOwner, expectedAttempt}` returns
+  exactly `{decision}` with closed `continue|stopped|terminal|superseded|missing`.
+  The atomic mutation rechecks fresh heartbeat/lease, ownership/attempt, terminal
+  status and current session job. Only `stopped` fails the exact current attempt;
+  terminal/superseded/missing release only the caller's live owned handle. A fresh
+  heartbeat returning `continue` preserves that child. Errors retain the worker
+  under its independent guardian deadline. Existing `OkResponse` wires stay exact.
 - Service claim's existing HTTP 204 is decoded as JSON null by the shared bounded
   transport. Worker response models still reject null where not allowed.
 
@@ -100,7 +125,22 @@ signals a persisted PID. Cleanup confirmation is a durable UUID-bound receipt.
 Success, runner crash, init/registration failure, stale heartbeat and hard timeout
 all unwind through termination. In-memory failed handles remain reserved for
 retry. Startup/periodic sweeping delivers only confirmed receipts; lost release
-responses retry precisely the same immutable tuple. Unknown rows without local
+responses retry precisely the same immutable tuple. Reconciliation uses a
+nonblocking cross-process flock and unique temporary files, bounds/no-follows
+journal reads, checks canonical UUID, environment/service origin and matching
+local job/name, and continues other deliveries after malformed/foreign records.
+There is no unscoped global stale-list failure policy. Only a confirmed local
+receipt authorizes recovery failure of its original claim. Unscoped older journals
+remain pending for diagnosis. Known owned live workers observe externally failed,
+cancelled or superseded jobs through fresh control transactions and stop promptly.
+Claim owner must match the lifecycle owner before any acquisition.
+
+Watch/runner heartbeats honor `HEARTBEAT_S` (15 s default, finite 1–60, below
+pinned lease); queue polling honors `ORCH_POLL_INTERVAL_MS` (2000 ms default,
+100–60000); sweeps honor `SWEEPER_INTERVAL_S` (180 s default, 1–86400), including
+during long jobs. Owned wait polling stays at 0.2 s without repeated service calls;
+control HTTP calls have a five-second deadline. Busy reconciliation locks defer
+to the next sweep, retaining receipts. Unknown rows without local
 proof remain unreleased, never guessed dead. All cooperating instances must share
 the same state directory on a local filesystem.
 
@@ -124,7 +164,13 @@ only the tapped fixture subject. This is stronger than a protocol fake, but is
 **not** live Convex, browser uploader/student E2E or a paid/vendor test.
 
 Python lifecycle failure tests explicitly use an in-memory **service protocol
-fake** with real child processes. Driver tests exercise owner death, independent
+fake** with real child processes. Additional executable HTTP probes run actual
+Lifecycle + owned sleep-forever children through real convex-test transactions:
+stale observation then heartbeat refresh must return continue with no release,
+then external terminalization releases; successful stale stop, cancellation,
+external service failure and owner supersession release well before hard lifetime.
+Actual Next cache replay covers unchanged inode reuse, missing rebuild and corrupt
+quarantine/rebuild. Driver tests exercise owner death, independent
 hard timeout without polling, cross-process duplicate names, descendants,
 registration/init unwind, retained cleanup retry and no late numeric signalling.
 HTTP lifecycle tests exercise atomic owner/attempt/stale guards on real
@@ -146,39 +192,43 @@ complete. Disposable logs/builds stay ignored in `.orca-scratch/`.
 
 ## Validation
 
-- `pnpm check`: passing lint, both strict TS projects, **336 JS tests / 30 files**,
-  Ruff, strict mypy (**92 runner / 12 orchestrator files**), **391 runner tests**,
-  **42 orchestrator tests**, 34-contract drift, six model-output schema limits
-  and offline Convex bindings. The final clean-log run is recorded before push.
-- `pnpm exec vitest run scripts/local-runtime.test.ts convex/tests/http-lifecycle.test.ts`:
-  **67 passed**, including the actual subprocess-to-Convex/Next integration.
-- `uv run --project services/orchestrator pytest services/orchestrator/tests -q`:
-  **42 passed**, repeated after the absolute monotonic guardian deadline change.
+- `pnpm check`: PASS — **345 JS tests / 31 files, 395 runner tests,
+  62 orchestrator tests**; ESLint, strict TS, Ruff, strict mypy (92 runner /
+  12 orchestrator files), 34-contract drift, six model-output schema limits and
+  offline Convex bindings.
+- `pnpm exec vitest run scripts/local-runtime.test.ts convex/tests/http-lifecycle.test.ts
+  convex/tests/upload-limits.test.ts apps/web/lib/upload/handler.test.ts`:
+  **92 passed**. Real HTTP/Convex transaction + owned-process race/stop probes,
+  actual Next cache reuse/missing/corrupt rebuild, and metadata-only local cap tests.
+- `uv run --project services/orchestrator pytest
+  services/orchestrator/tests/test_lifecycle.py -q`: **27 passed**.
 - `uv run --project runner pytest runner/tests/test_host_storage.py -q`:
-  **8 passed**.
-- `pnpm contracts:gen` and `pnpm convex:codegen`: passed; generated manifest refreshed.
+  **12 passed**, including early declared-source rejection without media work.
+- `pnpm contracts:gen`; `pnpm convex:codegen`: PASS.
 - `uv build --project runner --out-dir .orca-scratch/dist-runner` and
   `uv build --project services/orchestrator --out-dir .orca-scratch/dist-orch`:
-  both sdist and wheel builds passed.
-- `pnpm --filter @netsense/web build`: passed, including worker-sign and media routes.
-- `scripts/secret-scan.sh`: passed, actual gitleaks history and source scans;
-  installed with repository checksum verification inside `.orca-scratch/tools`.
-- `uv tool run --from pre-commit==4.7.0 pre-commit run --all-files`: passed.
-  The real staged commit hook is required and runs again on the commit, without bypass.
-- `git diff --check`: passed. No browser E2E or live vendor test was run.
+  both sdist/wheel builds PASS.
+- `pnpm --filter @netsense/web build`: PASS (production Next build).
+- `scripts/secret-scan.sh`: PASS (actual history/source scans);
+  `uv tool run --from pre-commit==4.7.0 pre-commit run --all-files`: PASS.
+  Actual staged commit hook runs without bypass on the corrective commit.
+- `git diff --check`: PASS. No `pnpm e2e` script exists; full browser E2E
+  and live vendor tests were not run.
 
-## Parent review — not yet integrated
+## Parent review correction / integration handoff
 
-Parent verified the 67-test executable integration/lifecycle route suite and fixed
-two lifecycle boundaries: sandbox names now follow `ns-{kind}-{sessionId}` across
-job attempts, and every observed runner exit checks whether the exact owned job
-is still running, including exit zero without a persisted `/worker/done`. The
-guarded failure mutation preserves jobs already completed by the runner.
+The blocking stale-snapshot finding is corrected by the closed transactional
+control wire, with real HTTP transactions and owned-process regression coverage.
+The session-based `ns-{kind}-{sessionId}` lock/name and guarded failure on **every**
+observed runner exit, including zero without persisted `/worker/done`, are preserved.
+Fresh heartbeat declines no longer kill. Externally terminalized and superseded
+owned jobs stop; successor attempts stay untouched. Global stale rows no longer
+allow unrelated local/Modal failures. Receipt reconciliation is serialized and
+scoped; malformed or foreign journals remain pending without blocking good rows.
 
-Blocking review finding: the current stale-watch branch terminates the worker
-even when the atomic stale failure mutation is a no-op because a heartbeat has
-refreshed. Parent reproduced release with exit -9 after a declined failure.
-The service wire needs an authoritative stop decision, and the lifecycle must
-continue watching when that decision declines. Reconciliation of externally
-stopped jobs and missing cached-media lookup also need corrective coverage.
-PR remains draft; full browser M1 E2E and automatic recovery remain pending.
+Automatic requeue stays disabled. Single new-tap/missing-moment policy is unchanged.
+T1.09/T1.11 remain PARTIAL; full browser M1 E2E, live vendor behavior, paid budget
+recovery, Modal, stage_retry and finalize remain UNTESTED/unimplemented as above.
+PR20 stays draft for parent review; nothing is merged into the parent integration.
+Parent alignment required: PR19's 5 GiB client validation (integrated separately
+at `9411703396439b2c91206ec74c2bd8c053e457c4`) must match this 2 GiB local cap.
