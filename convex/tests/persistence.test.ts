@@ -411,7 +411,7 @@ test("render rejects final, wrong mode/duration and foreign still ids without re
   }
 });
 
-test.each(["range", "keyframe", "remark", "candidate"])(
+test.each(["range", "keyframe", "exclusive-end", "remark", "candidate"])(
   "moment %s rejection rolls back receipt",
   async (mode) => {
     const c = await running();
@@ -422,6 +422,7 @@ test.each(["range", "keyframe", "remark", "candidate"])(
     const o = structuredClone(c.f.moment);
     if (mode === "range") o.endMs = 2001;
     if (mode === "keyframe") o.keyframeMs = 2000;
+    if (mode === "exclusive-end") o.keyframeMs = o.endMs;
     if (mode === "remark") o.remarkId = "synthetic-r2";
     if (mode === "candidate")
       Object.assign(o, { candidates: [{ startMs: 0, endMs: 2001 }] });
@@ -530,4 +531,61 @@ test("new AI attempts replace derived rows while original marks response replay 
   expect(await c.t.run((ctx) => ctx.db.query("annotations").unique())).toEqual(
     row,
   );
+});
+
+test("track ID collision rejects without changing another remark's track", async () => {
+  const c = await running();
+  await c.base();
+  const before = await c.t.run(async (ctx) => {
+    const track = await ctx.db.query("tracks").unique();
+    await ctx.db.patch(track!._id, { remarkId: "synthetic-r2" });
+    return ctx.db.query("tracks").collect();
+  });
+  const next = await c.start("track", "synthetic-r1");
+  expect(
+    (
+      await c.persist("track", next, c.f.track, {
+        cacheKey: data.run.inputHash,
+      })
+    ).status,
+  ).toBe(403);
+  expect(await c.t.run((ctx) => ctx.db.query("tracks").collect())).toEqual(
+    before,
+  );
+  expect(
+    (await c.t.run((ctx) => ctx.db.get(next)))?.persistedOutputHash,
+  ).toBeUndefined();
+});
+
+test("subject and anchor reject the exclusive end of their time window", async () => {
+  const c = await running();
+  await c.base();
+  const subject = await c.start("subject", "synthetic-r1");
+  await c.t.run(async (ctx) => {
+    const r = await ctx.db
+      .query("remarks")
+      .withIndex("by_sessionId", (q) => q.eq("sessionId", c.sessionId))
+      .collect();
+    await ctx.db.patch(r.find((x) => x.remarkId === "synthetic-r1")!._id, {
+      keyframeMs: c.f.moment.endMs,
+    });
+  });
+  const output = structuredClone(c.f.target);
+  output.target.frameMs = c.f.moment.endMs;
+  expect((await c.persist("target", subject, output)).status).toBe(403);
+  const anchor = await c.start("subject");
+  await c.t.run(async (ctx) => {
+    const session = await ctx.db.get(c.sessionId);
+    await ctx.db.patch(c.sessionId, {
+      subject: { ...session!.subject!, frameMs: c.f.transcode.durationMs },
+    });
+  });
+  expect(
+    (
+      await c.persist("target", anchor, {
+        ...c.f.anchor,
+        anchorFrameMs: c.f.transcode.durationMs,
+      })
+    ).status,
+  ).toBe(403);
 });

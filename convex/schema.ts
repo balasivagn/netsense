@@ -369,7 +369,8 @@ export default defineSchema({
     cacheKey: v.string(),
   })
     .index("by_sessionId", ["sessionId"])
-    .index("by_cacheKey", ["cacheKey"]),
+    .index("by_cacheKey", ["cacheKey"])
+    .index("by_trackId", ["trackId"]),
   agentTraces: defineTable({
     coachId: v.id("coaches"),
     stageRunId: v.id("stageRuns"),

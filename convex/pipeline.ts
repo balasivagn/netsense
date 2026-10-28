@@ -404,7 +404,7 @@ export const persistMoment = endpoint(
     requireValid(
       o.endMs - o.startMs <= s.config.params.maxMomentMs &&
         o.keyframeMs >= o.startMs &&
-        o.keyframeMs <= o.endMs,
+        o.keyframeMs < o.endMs,
     );
     for (const c of o.candidates) {
       range(c.startMs, c.endMs, duration(s));
@@ -436,7 +436,7 @@ export const persistTarget = internalMutation({
     if ("anchorBox" in o) {
       requireValid(
         o.anchorFrameMs === s.session.subject.frameMs &&
-          o.anchorFrameMs <= duration(s),
+          o.anchorFrameMs < duration(s),
       );
       box(o.anchorBox);
       key(o.referenceCropKey, s);
@@ -457,7 +457,7 @@ export const persistTarget = internalMutation({
           r.momentStartMs !== undefined &&
           r.momentEndMs !== undefined &&
           o.target.frameMs >= r.momentStartMs &&
-          o.target.frameMs <= r.momentEndMs,
+          o.target.frameMs < r.momentEndMs,
       );
       box(o.target.promptBox);
       requireValid(o.candidatesCount <= s.config.params.maxSubjectCandidates);
@@ -497,17 +497,24 @@ export const persistTrack = internalMutation({
     );
     key(o.fileRef, s);
     if (o.maskRef !== null) key(o.maskRef, s);
-    const all = await ctx.db.query("tracks").collect();
+    const sameId = await ctx.db
+      .query("tracks")
+      .withIndex("by_trackId", (q) => q.eq("trackId", o.trackId))
+      .collect();
     requireValid(
-      !all.some(
+      !sameId.some(
         (t) =>
           t.trackId === o.trackId &&
           (t.sessionId !== s.session._id || t.remarkId !== o.remarkId),
       ),
     );
-    const old = all.find(
-      (t) => t.sessionId === s.session._id && t.remarkId === o.remarkId,
-    );
+    const sessionTracks = await ctx.db
+      .query("tracks")
+      .withIndex("by_sessionId", (q) => q.eq("sessionId", s.session._id))
+      .collect();
+    const matches = sessionTracks.filter((t) => t.remarkId === o.remarkId);
+    requireValid(matches.length <= 1);
+    const old = matches[0];
     requireValid(!old || old.coachId === s.job.coachId);
     const data = {
       sessionId: s.session._id,

@@ -61,3 +61,5 @@ Final results are appended after required checks and hooks finish. Logs are disp
 - `scripts/secret-scan.sh`: **PASS**, real gitleaks scans of history and task source. `git diff --check`: **PASS**.
 - `uv tool run --from pre-commit==4.7.0 pre-commit run --all-files`: **PASS**, real gitleaks hook; actual commit hook also required. No exclusions, bypasses or secrets were added.
 - `pnpm e2e`: not available (T1.31 not implemented). No live Convex/vendor or full M1 E2E success claimed.
+
+Parent review: keyframes now use exclusive moment/clip endpoints, matching the runner's half-open windows. Track collision checks use the new `by_trackId` index and replacements use `by_sessionId`, avoiding a cross-session full-table scan. Regression tests cover endpoint rejection and cross-remark track identity collision with transactional rollback. `pnpm check` PASS after review: **261 JS, 124 runner, 1 orchestrator**; focused persistence/verbatim **74 tests**; contract/binding checks, secret scan, diff check and actual commit hook pass.
