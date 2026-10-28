@@ -682,6 +682,9 @@ expire after 300 seconds and are refreshed by repeating this authorized request.
 Errors are fixed `UNAUTHENTICATED` (401), `INVALID_REQUEST` (400), or
 `SELECTION_BUSY`/`SELECTION_UNAVAILABLE` (409); diagnostics are never returned.
 No source key, external URL, path or tool argument is accepted from a client.
+The browser bounds the response to 32 KiB and 100 seconds (headers and body),
+rejects redirects, validates the closed frame envelope/count/timestamps/geometry
+and session-scoped local media paths, and cancels stale requests on scope changes.
 
 Local driver only; R2 fails closed. Real `ffprobe`/`ffmpeg` must be on PATH
 (ffmpeg 8+ for the square-pixel scale filter). Private temporary directories use

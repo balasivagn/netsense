@@ -479,8 +479,8 @@ test("reload without File loads remote picker, safely retries and confirms one s
   await h.t.mutation(internal.uploads.complete, { uploadId: u._id, coachId: h.coachId, verifiedBytes: data.upload.bytesTotal });
   await h.sync();
   const fetcher = vi.fn().mockResolvedValueOnce(new Response(null, { status: 409 })).mockResolvedValue(Response.json({ selectionFrames: [
-    { idx: 0, ms: 0, url: "https://media.invalid/selection-a" },
-    { idx: 1, ms: 1000, url: "https://media.invalid/selection-b" },
+    { idx: 0, ms: 0, width: 400, height: 200, url: `https://media.invalid/api/media/local/sessions/${h.sessionId}/selection/a.jpg` },
+    { idx: 1, ms: 1000, width: 400, height: 200, url: `https://media.invalid/api/media/local/sessions/${h.sessionId}/selection/b.jpg` },
   ] }));
   vi.stubGlobal("fetch", fetcher);
   const view = render(<SessionLayout><SubjectPage /></SessionLayout>);

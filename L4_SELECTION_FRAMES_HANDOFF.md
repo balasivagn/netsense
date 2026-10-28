@@ -115,3 +115,17 @@ Final validation is recorded below after completion.
 No `pnpm e2e` script exists, and no full browser M1 or live Clerk/Convex/vendor
 validation is claimed. Review this lane's incremental diff against the base above;
 the draft PR to main also carries that parent integration ancestry.
+
+## Parent review
+
+The parent added a bounded browser response adapter: 32 KiB total, 100-second
+header/body deadline, no redirects, closed frame wire with count/order/time and
+geometry checks, session-scoped local media URL validation, and cancellation of
+late response bodies. Malformed or stalled responses now reach the existing safe
+retry state. Five regression tests cover these boundaries; route composition uses
+the complete real response shape.
+
+Parent `pnpm check`: PASS — **464 JS / 395 runner / 62 orchestrator tests**.
+Production web build, contract drift, secret scan and diff check PASS. Actual
+commit hook runs on the parent correction. Browser/live Clerk/Convex E2E remains
+UNTESTED, and review/retrack entry points still belong to subsequent work.

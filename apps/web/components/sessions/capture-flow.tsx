@@ -5,6 +5,7 @@ import { useMutation } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import { Screen06CaptureControls } from "../capture/screen06-capture-controls";
+import { loadSelectionFrames } from "../../lib/selection-frames/client";
 import type { SelectionFrame } from "../subject-picker/frame-scrubber";
 import { SubjectPicker } from "../subject-picker/subject-picker";
 import { useSessionFlow } from "./session-context";
@@ -216,26 +217,9 @@ export function SubjectSession() {
     setFrameError(false);
     if (!remote || !detail.upload?.complete || detail.job) return;
     const controller = new AbortController();
-    void fetch(`/api/sessions/${detail.id}/selection-frames`, {
-      signal: controller.signal,
-      cache: "no-store",
-    })
-      .then(async (response) => {
-        if (!response.ok) throw Error("unavailable");
-        const body = await response.json();
-        if (
-          !Array.isArray(body.selectionFrames) ||
-          !body.selectionFrames.length
-        )
-          throw Error("unavailable");
-        if (!controller.signal.aborted)
-          setFrames(
-            body.selectionFrames.map(({ idx, ms, url }: SelectionFrame) => ({
-              idx,
-              ms,
-              url,
-            })),
-          );
+    void loadSelectionFrames(detail.id, controller.signal)
+      .then((selectionFrames) => {
+        if (!controller.signal.aborted) setFrames(selectionFrames);
       })
       .catch(() => {
         if (!controller.signal.aborted) setFrameError(true);
