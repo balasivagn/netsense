@@ -149,6 +149,8 @@ post("/svc/jobs/sandbox", "service", async (ctx, input) => {
       sandboxId: string,
       sandboxName: string,
       driver: enumeration(["local", "modal"]),
+      leaseOwner: optional(string),
+      expectedAttempt: optional(integer),
     }),
   );
   return { ok: true };
@@ -168,7 +170,16 @@ post("/svc/jobs/released", "service", async (ctx, input) => {
 post("/svc/jobs/fail", "service", async (ctx, input) => {
   await ctx.runMutation(
     internal.svc.fail,
-    object(input, { jobId: id("jobs"), errorCode: parseError }),
+    object(input, {
+      jobId: id("jobs"),
+      errorCode: parseError,
+      leaseOwner: optional(string),
+      expectedAttempt: optional(integer),
+      staleOnly: optional((value) => {
+        if (typeof value !== "boolean") throw Error("CONTRACT_INVALID");
+        return value;
+      }),
+    }),
   );
   return { ok: true };
 });

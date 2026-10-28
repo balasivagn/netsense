@@ -108,7 +108,8 @@ class FakeWorker:
                     "promptPoint": None,
                     "frameMs": v["keyframeMs"],
                 },
-                "method": "anchor_reuse",
+                # Explicit fixture-backed identity match, not an unbounded anchor-reuse claim.
+                "method": "reid_model",
                 "why": copy["subjectWhy"],
                 "confidence": "high",
                 "candidatesCount": 3,

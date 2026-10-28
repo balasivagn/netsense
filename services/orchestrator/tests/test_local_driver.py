@@ -104,7 +104,7 @@ def test_cancellation_early_exit_terminates_process_group(tmp_path: Path) -> Non
 
 def test_hard_lifetime_timeout_kills_and_reaps(tmp_path: Path) -> None:
     pid_file = tmp_path / "pid"
-    spec = _spec(tmp_path, "sleep_forever.py", str(pid_file), timeout_s=0.1)
+    spec = _spec(tmp_path, "sleep_forever.py", str(pid_file), timeout_s=0.4)
     with LocalDriver().acquire(spec) as handle:
         pid = _read_pid(pid_file)
         with pytest.raises(LocalSandboxTimeoutError):
@@ -363,7 +363,7 @@ def test_reap_failure_retains_name_and_retry_sends_no_late_signal(
         handle.terminate()
         handle.terminate()
         assert handle._closed
-        assert len(signals) == 2
+        assert signals == []  # Only the independent guardian may signal owned groups.
     # Explicit recovery of the retained reservation after confirmed retry.
     assert spec.name not in LocalDriver._cleanup_pending
     with LocalDriver().acquire(_spec(tmp_path, "exit_success.py", name=spec.name)) as new:
@@ -433,78 +433,100 @@ def test_failure_immediately_after_popen_cleans_supervisor(
         assert handle.wait() == 0
 
 
-def test_final_signal_precedes_first_supervisor_reap(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_receipt_precedes_release_and_parent_never_signals(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import signal
-
     from netsense_orch.drivers import local_driver as module
 
     pid_file = tmp_path / "descendant"
-    events: list[str] = []
     with LocalDriver().acquire(
         _spec(tmp_path, "parent_spawns_descendant.py", str(pid_file))
-    ) as opaque:
-        assert isinstance(opaque, module._LocalSandboxHandle)
-        handle = opaque
+    ) as handle:
+        assert isinstance(handle, module._LocalSandboxHandle)
         assert handle.wait() == 0
-        assert handle.poll() == 0
-        process = handle._process
-        assert process is not None
-        assert process.returncode is None
-        assert _is_live(process.pid)
-        killpg = os.killpg
-        wait = process.wait
+        assert not handle.receipt.exists()
 
-        def record_signal(pgid: int, sig: int) -> None:
-            assert process.returncode is None
-            events.append("kill" if sig == signal.SIGKILL else "term")
-            killpg(pgid, sig)
+        def forbidden(*args: object) -> None:
+            pytest.fail("owner must not signal numeric identities")
 
-        def record_wait(timeout: float | None = None) -> int:
-            events.append("reap")
-            assert events[:2] == ["term", "kill"]
-            return wait(timeout)
-
-        monkeypatch.setattr(os, "killpg", record_signal)
-        monkeypatch.setattr(process, "wait", record_wait)
+        monkeypatch.setattr(os, "killpg", forbidden)
         handle.terminate()
-        handle.terminate()
-        assert events == ["term", "kill", "reap"]
+        assert handle.receipt.exists()
     _assert_stopped(_read_pid(pid_file))
 
 
-def test_failed_final_signal_keeps_leader_unreaped_until_retry(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import signal
-
-    from netsense_orch.drivers import LocalSandboxCleanupError
+def test_hard_lifetime_without_owner_polling(tmp_path: Path) -> None:
     from netsense_orch.drivers import local_driver as module
 
     pid_file = tmp_path / "pid"
-    spec = _spec(tmp_path, "sleep_forever.py", str(pid_file), name="signal-failure")
-    original_killpg = os.killpg
+    with LocalDriver().acquire(
+        _spec(tmp_path, "sleep_forever.py", str(pid_file), timeout_s=0.3)
+    ) as handle:
+        assert isinstance(handle, module._LocalSandboxHandle)
+        pid = _read_pid(pid_file)
+        _assert_stopped(pid)  # No poll/wait until independently killed.
+        with pytest.raises(LocalSandboxTimeoutError):
+            handle.wait()
+        assert handle.receipt.exists()
 
-    def fail_final_signal(pgid: int, sig: int) -> None:
-        if sig == signal.SIGKILL:
-            raise PermissionError("synthetic signal failure")
-        original_killpg(pgid, sig)
 
-    with monkeypatch.context() as patch:
-        patch.setattr(os, "killpg", fail_final_signal)
-        with pytest.raises(LocalSandboxCleanupError, match="signal unconfirmed"):
-            with LocalDriver().acquire(spec) as opaque:
-                assert isinstance(opaque, module._LocalSandboxHandle)
-                handle = opaque
-                pid = _read_pid(pid_file)
-        assert handle._process is not None
-        assert handle._process.returncode is None
-        assert not handle._closed
-        assert not handle._signals_done
+def test_missing_receipt_retains_cleanup_for_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from netsense_orch.drivers import LocalSandboxCleanupError
+    from netsense_orch.drivers import local_driver as module
+
+    spec = _spec(tmp_path, "exit_success.py", name="receipt-retry")
+    with LocalDriver().acquire(spec) as opaque:
+        assert isinstance(opaque, module._LocalSandboxHandle)
+        handle = opaque
+        assert handle.wait() == 0
+        original = Path.exists
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, "exists", lambda p: False if p == handle.receipt else original(p))
+            with pytest.raises(LocalSandboxCleanupError):
+                handle.terminate()
+            assert not handle._closed
+        handle.terminate()
+        assert handle._closed
+
+
+def test_owner_death_and_cross_process_name_lock(tmp_path: Path) -> None:
+    import subprocess
+
+    owner = subprocess.Popen(
+        [sys.executable, str(_FIXTURES / "own_sandbox.py"), str(tmp_path)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        pid = _read_pid(tmp_path / "pid", timeout_s=3)
+        spec = LocalSandboxSpec(
+            name="cross-process-owner",
+            command=(sys.executable, "-c", "pass"),
+            cwd=tmp_path,
+            env={},
+            timeout_s=2,
+            state_dir=tmp_path / "state",
+        )
         with pytest.raises(LocalSandboxNameInUseError):
             with LocalDriver().acquire(spec):
-                pytest.fail("must retain name")
-    handle.terminate()
-    _assert_stopped(pid)
-    assert spec.name not in LocalDriver._reserved_names
+                pytest.fail("cross-process duplicate must fail")
+        owner.kill()
+        owner.wait(timeout=2)
+        _assert_stopped(pid, timeout_s=3)
+        handle_id = (tmp_path / "handle").read_text()
+        receipt = tmp_path / "state" / f"{handle_id}.released.json"
+        deadline = time.monotonic() + 3
+        while not receipt.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert receipt.exists()
+        # A fresh owner can acquire only after guardian's confirmed cleanup.
+        with LocalDriver().acquire(spec) as handle:
+            assert handle.wait() == 0
+    finally:
+        if owner.poll() is None:
+            owner.kill()
+        owner.wait(timeout=2)

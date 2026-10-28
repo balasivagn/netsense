@@ -14,6 +14,8 @@ export const sandbox = internalMutation({
     sandboxId: v.string(),
     sandboxName: v.string(),
     driver: v.union(v.literal("local"), v.literal("modal")),
+    leaseOwner: v.optional(v.string()),
+    expectedAttempt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     if (!args.sandboxId.trim() || !args.sandboxName.trim())
@@ -21,6 +23,12 @@ export const sandbox = internalMutation({
     const job = await ctx.db.get(args.jobId);
     if (!job || job.status !== "running" || (job.leaseUntil ?? 0) <= Date.now())
       throw Error("JOB_NOT_RUNNING");
+    if (
+      (args.leaseOwner !== undefined && job.leaseOwner !== args.leaseOwner) ||
+      (args.expectedAttempt !== undefined &&
+        job.attempt !== args.expectedAttempt)
+    )
+      throw Error("LEASE_CHANGED");
     const existing = await ctx.db
       .query("sandboxes")
       .withIndex("by_jobId", (q) => q.eq("jobId", args.jobId))
@@ -86,11 +94,33 @@ export const released = internalMutation({
 });
 
 export const fail = internalMutation({
-  args: { jobId: v.id("jobs"), errorCode },
+  args: {
+    jobId: v.id("jobs"),
+    errorCode,
+    leaseOwner: v.optional(v.string()),
+    expectedAttempt: v.optional(v.number()),
+    staleOnly: v.optional(v.boolean()),
+  },
   handler: async (ctx, args) => {
     const job = await ctx.db.get(args.jobId);
     if (!job) throw Error("NOT_FOUND");
     if (job.status !== "running") return;
+    if (
+      (args.leaseOwner !== undefined && job.leaseOwner !== args.leaseOwner) ||
+      (args.expectedAttempt !== undefined &&
+        job.attempt !== args.expectedAttempt)
+    )
+      return;
+    if (args.staleOnly) {
+      const seconds = Number(process.env.HEARTBEAT_STALE_S ?? "90");
+      if (!Number.isFinite(seconds) || seconds <= 0)
+        throw Error("INVALID_STALE_SECONDS");
+      if (
+        (job.leaseUntil ?? 0) > Date.now() &&
+        (job.heartbeatAt ?? 0) > Date.now() - seconds * 1000
+      )
+        return;
+    }
     await ctx.db.patch(job._id, {
       status: "failed",
       errorCode: args.errorCode,

@@ -17,7 +17,8 @@
     "convex:codegen": "node scripts/convex-codegen.mjs",
     "convex:check": "node scripts/convex-codegen.mjs --check",
     "contracts:lint": "tsx scripts/lint-model-schemas.ts",
-    "contracts:test-drift": "tsx scripts/test-contract-drift.ts"
+    "contracts:test-drift": "tsx scripts/test-contract-drift.ts",
+    "orchestrator": "uv run --project services/orchestrator python -m netsense_orch"
   },
   "dependencies": {
     "convex": "1.48.0"

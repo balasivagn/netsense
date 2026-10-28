@@ -31,6 +31,9 @@ def main() -> None:
             if not 200 <= response.status < 300:
                 sys.stdout.buffer.write(b"HTTP_STATUS\n")
                 return
+            if response.status == 204:
+                sys.stdout.buffer.write(b"OK\nnull")
+                return
             data = bytearray()
             while True:
                 # read1 returns available bytes rather than waiting to fill a buffer.

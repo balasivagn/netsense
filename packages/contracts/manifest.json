@@ -19,7 +19,7 @@
     },
     {
       "path": "convex/http.ts",
-      "sha256": "0900de8e234ec68fd8c69f3ec2ab8cf57114b0a8c45218d0b66051d017348fd6"
+      "sha256": "6792c280474366438d23ab1e1677f4be40cddfb18128d4e7aae29eda8a41c6be"
     },
     {
       "path": "convex/jobs.ts",

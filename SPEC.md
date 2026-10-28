@@ -1073,3 +1073,63 @@ These make the shorthand above executable; they do not mark IC1 deployed or merg
 **Approved: retrack prerequisites after anchor failure (Bala, 28 Oct 2026).** After the coach confirms a new tap, a `subject_retrack` job reuses completed transcode, transcription, plan and per-remark moment outputs. Once the new subject anchor succeeds, it computes only missing per-remark moments before the subject → track → place → check branch. Existing completed moments are not recomputed; there is no full pipeline restart and no fabricated prerequisite output. This resolves the §6.5 reuse shorthand when the initial pipeline stopped before moments existed. T1.09 implementation and acceptance tests remain pending/UNTESTED.
 
 Persistence boundary clarification (T1.10): moments and clip times use half-open intervals `[startMs,endMs)`; selection/subject keyframes must precede the exclusive endpoint. Track persistence uses `by_trackId` for cross-session collision checks and `by_sessionId` for replacements; it never scans all sessions.
+
+### Local runtime integration boundary (T1.09 / T1.11, PARTIAL)
+
+The executable development/test path is `pnpm orchestrator` (`python -m
+netsense_orch`), explicitly gated by `NETSENSE_LOCAL_FAKE=1`, `NETSENSE_ENV` in
+`test|development`, and `SANDBOX_DRIVER=local`. It claims through the documented
+service HTTP API, passes only a job token and allowlisted safe runtime settings to
+`python -m netsense_runner --job <jobId>`, registers its sandbox, then opens a
+private startup gate. No model stage starts before registration succeeds. The
+worker reads the pinned job/config through `/worker/job`; only explicitly pinned
+synthetic model workers and the actual local transcode/check/render IDs are
+accepted. Fixtures must be explicitly selected from `fixtures/synthetic/dag`.
+No normal app/default config loads them and no production or paid provider is
+substituted. A no-paid ledger rejects every nonzero spend reservation.
+
+Storage signing uses bounded `POST /api/worker/sign` with the existing `{ops}`
+wire. Media GET/PUT uses owned subprocess transports with total deadlines,
+streamed byte limits, expiry checks, no redirects/proxies, and fixed errors. The
+shared trusted local filesystem is an explicit development capability:
+`NETSENSE_ARTIFACT_ROOT` must equal the VM's local object root. Immutable run JSON,
+receipts, tracks and synthetic crops use complete temporary files, fsync and
+atomic hard-link publication; identical replay is allowed, changed bytes reject.
+Cached render segments use the same atomic boundary with streamed comparison.
+Mutable full preview/JPEG/proxy/audio/keyframes use existing signed HTTP PUT.
+Check-then-PUT is never an immutable-write guarantee. Canonical session keys and
+no-follow directory/file descriptors constrain owned writes. This is trusted
+same-user local execution, not an OS security sandbox; only a local filesystem is
+supported (network-filesystem blocking/durability semantics are UNTESTED).
+
+Two backwards-compatible private service wire extensions protect local ownership:
+`POST /svc/jobs/sandbox` accepts optional `leaseOwner` and `expectedAttempt` and
+atomically rejects mismatches before registration. `POST /svc/jobs/fail` accepts
+these same optional guards and optional `staleOnly`; mismatched guards are a
+no-op. `staleOnly=true` rechecks lease expiry OR the server-configured heartbeat
+staleness inside the mutation, so a stale query snapshot cannot fail a refreshed
+lease. The executable local client always supplies both ownership guards; older
+trusted service callers retain their existing behavior. No public stage schema
+changes, new paid ledger, or automatic requeue are introduced.
+
+One independent local guardian owns a direct, unreaped command-group leader.
+It enforces its immutable startup lifetime and monitors owner socket EOF without
+owner polling. The guardian sends TERM then final KILL before reaping the group
+leader; it retries cleanup failures while retaining ownership and a shared
+cross-process name flock. Only confirmed cleanup publishes a durable release
+receipt. Startup/periodic reconciliation delivers the exact immutable release
+tuple through `/svc/jobs/released`, including after HTTP response loss. Persisted
+PIDs are never signalled. All cooperating local orchestrators must share
+`NETSENSE_LOCAL_STATE_DIR`; multiple hosts, hostile escaping commands, machine
+power loss, or external destruction of the guardian/state directory are outside
+this development guarantee. Unknown/no-receipt rows stay unreleased for diagnosis.
+
+Recovery remains PARTIAL: incomplete attempts and prior budget counters are not
+projected. Therefore this host accepts only first claims, durably admits a job
+once in its runner scratch directory, fails stale jobs with atomic ownership
+checks, and never automatically requeues. Keep admission/state/scratch durable
+across orchestrator restarts. The existing completed-output reuse and new-tap
+missing-moment policy in the DAG remain unchanged; a new subject-retrack job can
+read prior completed immutable artifacts. Paid recovery, stage retries,
+remark-retrack, finalize approval snapshots, and live Modal/Convex/R2 behavior
+remain PARTIAL / UNTESTED.

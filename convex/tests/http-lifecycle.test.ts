@@ -1072,3 +1072,60 @@ test("failed stage finish, ordered retry and immutable start metadata persist us
     await t.run((ctx) => ctx.db.query("stageRuns").collect()),
   ).toHaveLength(2);
 });
+
+test("guarded local failure rechecks owner, attempt and fresh heartbeat atomically", async () => {
+  const c = await running();
+  const input = {
+    jobId: c.jobId,
+    errorCode: "INFRA_EXEC",
+    leaseOwner: c.claimed.job.leaseOwner,
+    expectedAttempt: c.claimed.job.attempt,
+    staleOnly: true,
+  };
+  const fail = () => c.t.fetch("/svc/jobs/fail", post(input));
+  expect((await fail()).status).toBe(200);
+  expect((await c.t.run((ctx) => ctx.db.get(c.jobId)))?.status).toBe("running");
+  await c.t.run((ctx) =>
+    ctx.db.patch(c.jobId, { leaseOwner: crypto.randomUUID(), leaseUntil: 0 }),
+  );
+  expect((await fail()).status).toBe(200);
+  expect((await c.t.run((ctx) => ctx.db.get(c.jobId)))?.status).toBe("running");
+  await c.t.run((ctx) =>
+    ctx.db.patch(c.jobId, {
+      leaseOwner: input.leaseOwner,
+      attempt: input.expectedAttempt + 1,
+    }),
+  );
+  expect((await fail()).status).toBe(200);
+  expect((await c.t.run((ctx) => ctx.db.get(c.jobId)))?.status).toBe("running");
+  await c.t.run((ctx) =>
+    ctx.db.patch(c.jobId, { attempt: input.expectedAttempt }),
+  );
+  expect((await fail()).status).toBe(200);
+  expect((await c.t.run((ctx) => ctx.db.get(c.jobId)))?.status).toBe("failed");
+});
+
+test("guarded sandbox registration rejects a changed claim owner", async () => {
+  const c = await running();
+  await c.t.run((ctx) =>
+    ctx.db.patch(c.jobId, { leaseOwner: crypto.randomUUID() }),
+  );
+  expect(
+    (
+      await c.t.fetch(
+        "/svc/jobs/sandbox",
+        post({
+          jobId: c.jobId,
+          sandboxId: crypto.randomUUID(),
+          sandboxName: crypto.randomUUID(),
+          driver: "local",
+          leaseOwner: c.claimed.job.leaseOwner,
+          expectedAttempt: c.claimed.job.attempt,
+        }),
+      )
+    ).status,
+  ).toBe(400);
+  expect(await c.t.run((ctx) => ctx.db.query("sandboxes").collect())).toEqual(
+    [],
+  );
+});
