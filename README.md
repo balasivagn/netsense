@@ -51,7 +51,7 @@ Tests: `pnpm check` (unit, contracts) and `pnpm e2e` (end-to-end with a test-onl
 
 - Coach-only sign-in; student lessons need a private link plus code, expire after 30 days, and can be turned off.
 - Only items the coach approved are shared. Video links are short-lived; download is off in the player.
-- Hackathon build: the demo uses adults who agreed to be filmed. A consent step for juniors comes in a later version.
+- Hackathon build: everyone filmed is an adult who agreed to be filmed; the coach confirms this with one checkbox before each upload. A full consent flow for juniors comes in a later version.
 - No footage, audio or transcripts of real people are stored in this repository.
 
 ## Built during the Hackathon
