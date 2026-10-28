@@ -2,7 +2,11 @@
 name = "netsense-runner"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
-dependencies = ["pydantic>=2.12,<3", "jsonschema>=4.25,<5"]
+dependencies = [
+    "pydantic>=2.12,<3",
+    "jsonschema>=4.25,<5",
+    "pillow>=13.0.0",
+]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
