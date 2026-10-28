@@ -1,3 +1,4 @@
+import { claimJob } from "./lib/lifecycle";
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
@@ -63,30 +64,6 @@ export const enqueue = internalMutation({
 });
 export const claim = internalMutation({
   args: { leaseOwner: v.string() },
-  handler: async (ctx, args) => {
-    if (!args.leaseOwner.trim()) throw Error("INVALID_LEASE_OWNER");
-    const queued = await ctx.db
-      .query("jobs")
-      .withIndex("by_status_createdAt", (q) => q.eq("status", "queued"))
-      .order("asc")
-      .collect();
-    const job = queued.find((j) => j.attempt < j.maxAttempts);
-    if (!job) return null;
-    // Convex mutations are serializable: the indexed read conflicts with a concurrent claim.
-    const config = await ctx.db
-      .query("pipeline_config")
-      .withIndex("by_version", (q) => q.eq("version", job.configVersion))
-      .unique();
-    if (!config) throw Error("CONFIG_MISSING");
-    const now = Date.now();
-    await ctx.db.patch(job._id, {
-      status: "running",
-      leaseOwner: args.leaseOwner,
-      leaseUntil: now + config.limits.jobLeaseS * 1000,
-      heartbeatAt: now,
-      startedAt: job.startedAt ?? now,
-      attempt: job.attempt + 1,
-    });
-    return ctx.db.get(job._id);
-  },
+  handler: async (ctx, args) =>
+    (await claimJob(ctx, args.leaseOwner))?.job ?? null,
 });

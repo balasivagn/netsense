@@ -1,3 +1,4 @@
+import { canonicalOutput } from "./lib/lifecycle";
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
@@ -6,7 +7,7 @@ import { stage, stageStatus } from "./validators";
 import { errorCode } from "./errorCodes";
 async function runningJob(ctx: MutationCtx, id: Id<"jobs">) {
   const job = await ctx.db.get(id);
-  if (!job || job.status !== "running" || (job.leaseUntil ?? 0) < Date.now())
+  if (!job || job.status !== "running" || (job.leaseUntil ?? 0) <= Date.now())
     throw Error("JOB_NOT_RUNNING");
   return job;
 }
@@ -71,12 +72,14 @@ export async function startStageRun(ctx: MutationCtx, args: { jobId: Id<"jobs">;
           r.stage !== args.stage ||
           r.remarkId !== args.remarkId ||
           r.inputHash !== args.inputHash ||
-          r.workerId !== args.workerId,
+          r.workerId !== args.workerId ||
+          r.promptHash !== args.promptHash || r.candidate !== args.candidate,
       )
     )
       throw Error("IDEMPOTENCY_CONFLICT");
     const same = prior.find((r) => r.attempt === args.attempt);
     if (same) return same._id;
+    if (args.attempt !== Math.max(0, ...prior.map(r => r.attempt)) + 1) throw Error("ATTEMPT_OUT_OF_ORDER");
     if (prior.some((r) => r.status === "running" || r.status === "done"))
       throw Error("ATTEMPT_ALREADY_ACTIVE_OR_DONE");
     return ctx.db.insert("stageRuns", {
@@ -114,6 +117,7 @@ export async function finishStageRun(ctx: MutationCtx, args: { stageRunId: Id<"s
       args.status === "queued" ||
       (args.status === "done" && !args.outputRef) ||
       args.errorDetail !== undefined ||
+      (args.outputRef !== undefined && !canonicalOutput(args.outputRef, job.sessionId)) ||
       ![args.samFrames, args.inputTokens, args.outputTokens].every(
         (x) => Number.isSafeInteger(x) && x >= 0,
       ) ||

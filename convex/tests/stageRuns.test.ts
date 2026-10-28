@@ -9,12 +9,13 @@ async function running() {
   return context;
 }
 test("start pins worker metadata and finish advances coach row without double counting", async () => {
-  const { t, jobId } = await running();
+  const { t, jobId, sessionId } = await running();
   const args = { ...data.run, stage: "transcode" as const, jobId };
   const run = await t.mutation(internal.stageRuns.start, args);
   expect(await t.mutation(internal.stageRuns.start, args)).toBe(run);
   const finish = {
     ...data.finish,
+    outputRef: `sessions/${sessionId}/transcode-output`,
     status: "done" as const,
     stageRunId: run,
     inputTokens: 10,
@@ -36,7 +37,7 @@ test("start pins worker metadata and finish advances coach row without double co
   ).rejects.toThrow("ATTEMPT_IMMUTABLE");
 });
 test("rollup uses the pinned labels after active config changes", async () => {
-  const { t, jobId } = await running();
+  const { t, jobId, sessionId } = await running();
   await t.run(async (ctx) => {
     const config = (await ctx.db.query("pipeline_config").collect())[0];
     const { _id, _creationTime, ...copy } = config;
@@ -56,6 +57,7 @@ test("rollup uses the pinned labels after active config changes", async () => {
   });
   await t.mutation(internal.stageRuns.finish, {
     ...data.finish,
+    outputRef: `sessions/${sessionId}/transcode-output`,
     stageRunId: run,
     status: "done",
   });
@@ -64,7 +66,7 @@ test("rollup uses the pinned labels after active config changes", async () => {
   );
 });
 test("reject wrong worker, invalid attempts, missing output and invalid usage", async () => {
-  const { t, jobId } = await running();
+  const { t, jobId, sessionId } = await running();
   const args = { ...data.run, stage: "transcode" as const, jobId };
   await expect(
     t.mutation(internal.stageRuns.start, { ...args, workerId: "not-pinned" }),
@@ -91,6 +93,7 @@ test("reject wrong worker, invalid attempts, missing output and invalid usage", 
   await expect(
     t.mutation(internal.stageRuns.finish, {
       ...data.finish,
+      outputRef: `sessions/${sessionId}/transcode-output`,
       stageRunId,
       status: "done",
       costUsd: -1,
@@ -99,6 +102,7 @@ test("reject wrong worker, invalid attempts, missing output and invalid usage", 
   await expect(
     t.mutation(internal.stageRuns.finish, {
       ...data.finish,
+      outputRef: `sessions/${sessionId}/transcode-output`,
       stageRunId,
       status: "done",
       errorDetail: "raw text",
@@ -106,7 +110,7 @@ test("reject wrong worker, invalid attempts, missing output and invalid usage", 
   ).rejects.toThrow("CONTRACT_INVALID");
 });
 test("expired lease rejects writes and failed attempts may retry without progress inflation", async () => {
-  const { t, jobId } = await running();
+  const { t, jobId, sessionId } = await running();
   const args = { ...data.run, stage: "transcode" as const, jobId };
   const stageRunId = await t.mutation(internal.stageRuns.start, args);
   await t.mutation(internal.stageRuns.finish, {
@@ -122,6 +126,7 @@ test("expired lease rejects writes and failed attempts may retry without progres
   });
   await t.mutation(internal.stageRuns.finish, {
     ...data.finish,
+    outputRef: `sessions/${sessionId}/transcode-output`,
     stageRunId: second,
     status: "done",
   });
@@ -173,6 +178,7 @@ test("per-remark progress includes all tracked branches and ignores note-only br
     });
     await t.mutation(internal.stageRuns.finish, {
       ...data.finish,
+      outputRef: `sessions/${sessionId}/transcode-output`,
       stageRunId: run,
       status: "done",
     });

@@ -19,7 +19,7 @@
     },
     {
       "path": "convex/jobs.ts",
-      "sha256": "c6672775affea549442d1b8f54a26c078fe1f464b4bef653d78ed2680bffb147"
+      "sha256": "6428292e19c94323108c9559e0e229bc4079b16a3322256fa1a54acef9b5a035"
     },
     {
       "path": "convex/lib/auth.ts",
@@ -35,7 +35,7 @@
     },
     {
       "path": "convex/stageRuns.ts",
-      "sha256": "6bdd88acc017f9789461c74cc0c5648129b94b5d7b0ea3c517f6b5c1730cee22"
+      "sha256": "c7ca24d23f74ab66d22f1dac872cb4bad747238178ff38f2558340cba130ccbd"
     },
     {
       "path": "convex/students.ts",
