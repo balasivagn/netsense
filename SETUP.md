@@ -8,7 +8,9 @@ Ground rules:
 - Commands marked **UNTESTED** come from vendor docs and have not been run for this project yet; if one fails, use the vendor's current docs and note the fix in the box.
 - Times are Singapore time (SGT).
 
-Order: 0 → 1 → 4 → (5) first, because the M0 spike (due Wed 28 Oct 11:59 PM SGT) needs Meta and Modal. Then 2, 3, 6, 9, 10. Steps 7 and 8 are optional.
+Order: 0 → 1 → 4 → (5) first, because the M0 spike (video part due Wed 28 Oct 11:59 PM SGT) needs Meta and Modal. Then 2, 3, 6, 9, 10. Steps 7 and 8 are optional. Step 11 (record coach commentary) is Sat 31 Oct / Sun 1 Nov.
+
+Note (v1.1): Codex can start the "Ready to test now" chunk (TASKS.md) with **no keys at all**; only step 0 is needed for that, and steps 2–3 (free Clerk and Convex dev accounts) for running the app and E2E. Your first 2 clips (your own batting, no commentary) are enough for the spike's video part; for each clip, click the one person to follow with `spike/pick_subject.py` (RUNBOOK §1.4).
 
 ---
 
@@ -311,11 +313,34 @@ cp .env.example .env.local   # only the first time; then fill values
 pnpm check:env               # lists missing names
 pnpm dev                     # app on http://localhost:3000
 ```
-Remaining non-secret settings (pick values per SPEC §17–18, defaults there): `AGENT_PROVIDER_DEFAULT`, `SANDBOX_TIMEOUT_CAP_S`, `SANDBOX_IDLE_TIMEOUT_S`, `HEARTBEAT_S`, `HEARTBEAT_STALE_S`, `JOB_LEASE_S`, `JOB_MAX_ATTEMPTS`, `ORCH_POLL_INTERVAL_MS`, `SWEEPER_INTERVAL_S`, `LINK_TTL_DAYS`, `DAILY_SPEND_LIMIT_USD`, `JOB_SAM_FRAME_CAP`, `JOB_SPARK_TOKEN_CAP`, `FANOUT_CONCURRENCY`, `MAX_VIDEO_MINUTES`, feature flags.
+Leave `TEST_FIXTURES_ENABLED`, `TRANSCRIBE_PROVIDER`, `TEST_FIXTURE_FILE` and `TRACK_SEGMENTS_FROM` **empty on the VM / prod**; they are for local testing only (RUNBOOK §1.8, §1.9). Remaining non-secret settings (pick values per SPEC §17–18, defaults there): `AGENT_PROVIDER_DEFAULT`, `SANDBOX_TIMEOUT_CAP_S`, `SANDBOX_IDLE_TIMEOUT_S`, `HEARTBEAT_S`, `HEARTBEAT_STALE_S`, `JOB_LEASE_S`, `JOB_MAX_ATTEMPTS`, `ORCH_POLL_INTERVAL_MS`, `SWEEPER_INTERVAL_S`, `LINK_TTL_DAYS`, `DAILY_SPEND_LIMIT_USD`, `JOB_SAM_FRAME_CAP`, `JOB_SPARK_TOKEN_CAP`, `FANOUT_CONCURRENCY`, `MAX_VIDEO_MINUTES`, feature flags.
 
 **What I saw / notes:**
 | Item | Notes |
 |---|---|
 | Date / time (SGT) | |
 | Missing names | |
+| Problems | |
+
+---
+
+## 11. Record coach commentary (Sat 31 Oct / Sun 1 Nov)
+
+Needed for the voice checks (TASKS T0.7, T0.8), real-voice tuning and the demo hero clip. Deadline: on disk by **Sun 1 Nov 12 PM SGT** (Sat 31 Oct preferred); later than that puts the Tue 3 Nov demo video at risk (WORKPLAN §5.1).
+
+- At least 2 clips, about 5–10 min each, ≥ 5 remarks each. Adults who agreed to be filmed only (D2, D3); note the agreement off-app.
+- The coach talks about **one player** (the one you will tap on 07a) while filming. Other people in frame are fine; they are ignored.
+- Phone near the coach's voice (the coach films, or a second phone/mic close by); little wind; sound on.
+- Camera still (tripod or fence mount), the player large in frame and not hidden behind the net post for long.
+- Copy clips to `spike/clips/` (git-ignored) and fill the subject columns of `deliveries.csv` with `spike/pick_subject.py`.
+- Pick the best one as the demo hero candidate. Never use a test-fixture session in the demo.
+
+Yields: no env vars. Verify: `uv run python spike/transcribe.py clips/<clip>.wav` prints turns (after step 1).
+
+**What I saw / notes:**
+| Item | Notes |
+|---|---|
+| Date / time (SGT) | |
+| Clips recorded (count, length) | |
+| Agreement notes kept off-app | |
 | Problems | |

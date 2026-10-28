@@ -2,6 +2,8 @@
 
 How to run the build as parallel work: one Codex agent per lane, parallel Codex subagents for small or contract-isolated chunks, and Bala for keys, clips and decisions. Task IDs refer to TASKS.md; contracts refer to SPEC.md.
 
+**v1.1 (Wed 28 Oct 2026, 3:05 PM SGT):** one selected person is tracked (DECISIONS F1) and there is no coach voice until Sat 31 Oct / Sun 1 Nov (F2). Changes here: C11 is now the subject resolver; new chunks C21 (subject selection UI) and C22 (test-only fixture + guards); checkpoints needing real voice move to the weekend (§5, with the knock-on stated in §5.1). First work for Codex: the "Ready to test now" chunk in TASKS.md (no keys, no voice).
+
 Complexity tiers: **S** ≤ half a day, contract-isolated, few files. **M** about a day, touches 2 modules or a vendor API. **L** more than a day, or cross-cutting and stateful. Tiers are estimates, not measurements.
 
 ## 1. Rule: contracts land first
@@ -29,8 +31,8 @@ Each lane can mock the others: the `fake` provider, `SANDBOX_DRIVER=local`, `STO
 | C8 | Stage 1 transcribe | `stages/s1_transcribe.py` | WAV chunks → turns | `Transcribe*` | C7 | S (one endpoint, error map) | Codex subagent |
 | C9 | Stage 2 plan agent | `stages/s2_plan.py`, `prompts/plan.md` | turns → remarks, drafts, fan-out | `Plan*`, §8.1 | C8 contract only | M (prompt + verbatim post-processing) | Codex subagent |
 | C10 | Stage 3 moment agent | `stages/s3_moment.py`, `prompts/moment.md` | remark + key frames → moment | `Moment*`, §8.2 | contracts only | S (contract-isolated) | Codex subagent |
-| C11 | Stage 4 player resolver | `stages/s4_player.py`, `rules/role_from_words.py` | key frame + remark → target box | `Player*`, §8.3 | contracts only; SAM image call | M (SAM + Spark + rule cross-check) | Codex subagent |
-| C12 | Stage 5 SAM track | `stages/s5_track.py`, `sam/` | window + prompt → track file | `Track*` | contracts only; spike results | L (streaming parse, id re-association, Files API lifecycle, cache, caps; UNTESTED) | Codex subagent with lane L5 review |
+| C11 | Stage 4 subject resolver (anchor + re-identification) | `stages/s4a_subject_anchor.py`, `stages/s4_subject.py`, `rules/position_prior.py` | tap point → anchor box + reference crop; key frame + reference crop → the same person's box | `SubjectAnchor*`, `Subject*`, §7.4, §8.3 | contracts only; SAM image call; C21 for real taps | M (SAM point prompt + Spark re-id + prior; UNTESTED until S-4) | Codex subagent |
+| C12 | Stage 5 SAM track (subject only, swap guard, segment mode) | `stages/s5_track.py`, `sam/` | window + subject prompt → track file | `Track*` | contracts only; spike results | L (streaming parse, single-id filter, re-association, swap guard, Files API lifecycle, cache, caps; UNTESTED) | Codex subagent with lane L5 review |
 | C13 | Stage 6 mark placer | `stages/s6_place.py`, `prompts/place.md` | remark + track summary → marks | `Place*`, §8.4 | contracts only | S (schema-bound, span copy) | Codex subagent |
 | C14 | Stage 7 rules checker + routing | `stages/s7_check.py`, `rules/` | marks + track → verdicts | `Check*` | contracts only | S (pure functions) | Codex subagent |
 | C15 | Stage 8 ffmpeg render + stills + finalize | `stages/s8_render.py`, `media/overlay_draw.py`, `finalize.py` | annotations + tracks → MP4 / JPEGs | `Render*` | C7; overlay geometry shared with C16 | M (Pillow overlay + ffmpeg segments + reuse) | Codex subagent |
@@ -39,19 +41,24 @@ Each lane can mock the others: the `fake` provider, `SANDBOX_DRIVER=local`, `STO
 | C18 | Observability + cost guards | `scripts/runs-*`, `convex/costLedger.ts`, logging modules | stageRuns/ledger → CLI views, stops | §16, §18 | C2, C5 | S (read-side + checks) | Codex subagent |
 | C19 | Demo/seed fallback (labelled) | `scripts/demo-*`, `components/fallback-badge.tsx` | real processed session → bundle → import with badge | §22.4 | C2, C17 | S | Codex subagent; **Bala** supplies the real session |
 | C20 | Deploy + E2E + README | `infra/vm`, `tests/e2e`, `README.md` | built app → running VM, green suite | all | everything | M (integration) | Codex lane agent L0 (integration owner); **Bala** for VM access |
-| H | Keys, clips, decisions, spike verdict, demo video | — | — | SETUP.md, DECISIONS.md | — | — | **Bala** (T0.1, T0.2, T0.6, T1.30 parts, T1.34) |
+| C21 | Subject selection (07a) + gating + Change who to follow | `apps/web/app/sessions/[id]/subject`, `components/subject-picker`, `lib/video/grab-frame.ts`, `convex/sessions.ts` (setSubject), `convex/jobs.ts` (enqueueWhenReady) | local file frame + tap → `sessions.subject` → job enqueued once | `Subject` (§7), §9, §10 | C0, C2; UI also C4 | M (frame decode on phones, normalised coordinates, either-order gating; no wireframe) | Codex lane agent L1 (UI) + L2 (gating) |
+| C22 | Test-only remarks fixture + never-ship guards | `fixtures/test-only/`, `scripts/make-test-remarks.ts`, `stages/s1_transcribe_fixture.py`, `scripts/check-no-fixtures.ts`, banner component | fixture JSON → `TranscribeOutput` flagged `testFixture` | `Transcribe*`, SPEC §19.1 | C0, C5 | S (small, but the guards must be tested) | Codex subagent |
+| H | Keys, clips, decisions, spike verdict, commentary recording, demo video | — | — | SETUP.md, DECISIONS.md | — | — | **Bala** (T0.1, T0.2, T0.6, T0.7, T0.8, T1.30 parts, T1.34) |
 
 ## 3. Dependency graph
 
 ```mermaid
 flowchart TD
-  H0["H: keys + clips (T0.1, T0.2)"] --> SP["M0 spike (T0.3–T0.6)"]
+  H0["H: keys + silent clips (T0.1, T0.2)"] --> SP["M0 spike, video part (T0.3–T0.6)"]
+  HV["H: record commentary Sat 31 Oct / Sun 1 Nov (T0.8)"] --> T07["T0.7 Voice Transcribe go/no-go"]
   C0["C0 contracts + schema (L0)"] --> IC1{{"IC1 contracts frozen"}}
   IC1 --> C2["C2 Convex functions"]
   IC1 --> C3["C3 Clerk auth"]
   IC1 --> C5["C5 runner DAG"]
   IC1 --> C16["C16 player + overlay"]
   IC1 --> STG["C10 C11 C13 C14 stage workers (contract-isolated)"]
+  IC1 --> C22["C22 test-only fixture + guards"]
+  C2 --> C21["C21 subject selection 07a"]
   C3 --> C4["C4 upload + storage"]
   C2 --> C1["C1 coach screens"]
   C5 --> C6["C6 orchestrator + Modal"]
@@ -62,18 +69,25 @@ flowchart TD
   C4 --> IC2
   C6 --> IC2
   C1 --> IC2
-  C9 --> IC3{{"IC3 stages 1–2 live"}}
-  IC2 --> IC3
-  STG --> IC4{{"IC4 fan-out 3–7 live"}}
-  C12 --> IC4
-  IC3 --> IC4
+  C21 --> IC2
+  C22 --> IC2
+  IC2 --> IC3A{{"IC3a subject tracking on silent clips (Thu 29)"}}
+  C12 --> IC3A
+  STG --> IC4{{"IC4 fan-out 2–7 live, test-only fixture (Fri 30)"}}
+  IC3A --> IC4
+  C9 --> IC4
   C7 --> C15["C15 render + finalize"]
-  IC4 --> IC5{{"IC5 end-to-end on real clip"}}
-  C15 --> IC5
-  C16 --> IC5
-  IC5 --> C17["C17 student link"]
+  IC4 --> IC5A{{"IC5a end-to-end, real video + test-only fixture (Sat 31)"}}
+  C15 --> IC5A
+  C16 --> IC5A
+  T07 --> IC3{{"IC3 stages 1–2 live on real voice (Sun 1)"}}
+  C9 --> IC3
+  IC3 --> IC5B{{"IC5b end-to-end on real commentary (Sun 1)"}}
+  IC5A --> IC5B
+  IC5A --> C17["C17 student link"]
   C2 --> C18["C18 observability + cost"]
   C17 --> IC6{{"IC6 share + student + final render"}}
+  IC5B --> IC6
   C18 --> IC7{{"IC7 feature freeze"}}
   IC6 --> C19["C19 demo fallback"] --> IC7
   IC6 --> C20["C20 deploy + E2E + README"] --> IC7
@@ -85,19 +99,21 @@ flowchart TD
 | Lane | Owner | Chunks | TASKS.md IDs | Runs in parallel with |
 |---|---|---|---|---|
 | L0 Contracts + integration | Codex lane agent | C0, C20 | T1.01, T1.02, T1.03 (then T1.30, T1.31, T1.33) | first alone; later integrates everyone |
-| L1 Web UI | Codex lane agent (+ S-tier subagents) | C1, C16 | T1.07, T1.13, T1.22, T1.23, T1.24, T1.25, UI part of T1.27 | L2, L4, L5, L6 |
-| L2 Convex functions | Codex lane agent | C2 | T1.03 (functions part), T1.10, Convex parts of T1.22, T1.24, T1.25, T1.27 | L1, L4, L5, L6 |
+| L1 Web UI | Codex lane agent (+ S-tier subagents) | C1, C16, C21 (UI) | T1.07, T1.13, T1.35 (UI), T1.22, T1.23, T1.24, T1.25, UI part of T1.27 | L2, L4, L5, L6 |
+| L2 Convex functions | Codex lane agent | C2, C21 (gating) | T1.03 (functions part), T1.10, T1.35 (setSubject, gating), Convex parts of T1.22, T1.24, T1.25, T1.27 | L1, L4, L5, L6 |
 | L3 Auth | Codex subagent | C3 | T1.04 | everything; short |
 | L4 Upload + storage | Codex lane agent | C4 | T1.05, T1.06 | L1, L2, L5, L6 |
 | L5 Runner + orchestrator | Codex lane agent | C5, C6, C7 | T1.08, T1.09, T1.11, T1.12 | L1, L2, L4, L6 |
-| L6 Stage workers | parallel Codex subagents, one per stage | C8–C15 | T1.14, T1.15, T1.16, T1.17, T1.18, T1.19, T1.20, T1.21, T1.26 | each other (contract-isolated, fake provider) |
-| L7 Student link | Codex lane agent | C17 | T1.27, T1.28 | L6 tail, L9 |
+| L6 Stage workers | parallel Codex subagents, one per stage | C8–C15, C22 | T1.14, T1.15, T1.16, T1.17, T1.18, T1.19, T1.20, T1.21, T1.26, T1.36 | each other (contract-isolated, fake provider) |
+| L7 Student link | Codex lane agent | C17 | T1.27, T1.28 | L6 tail, L8 |
 | L8 Ops: observability, cost, demo fallback | Codex subagents | C18, C19 | T1.29, T1.32 | L7 |
-| H Human | Bala | H | T0.1, T0.2, T0.6, parts of T1.04, T1.11, T1.30, T1.31 (live smoke), T1.34; all of DECISIONS.md | always |
+| H Human | Bala | H | T0.1, T0.2, T0.6, T0.7, T0.8 (record commentary Sat 31 Oct / Sun 1 Nov), parts of T1.04, T1.11, T1.30, T1.31 (live smoke), T1.34; all of DECISIONS.md | always |
 | Spike | Codex agent with Bala | — | T0.3, T0.4, T0.5 | L0 (no shared files) |
 
 Notes:
-- L6 stage subagents only need the contracts and the fake provider; real-key runs happen at IC3/IC4 on Bala's keys.
+- **Start here (no keys, no voice):** the "Ready to test now" chunk in TASKS.md runs L0 → L5 (local driver) → L2/L1 (C21) → C22 → IC2.
+- L6 stage subagents only need the contracts and the fake provider; real-key runs happen at IC3a/IC4 on Bala's keys. Stages 4–5 (C11, C12) need **no voice**: they run on Bala's silent clips in segment mode, so they move ahead of stages 1–3 in priority.
+- Stages 1–3 and 6 are built and unit-tested now on the test-only fixture (C22), but their prompts are tuned only on real commentary (Sun 1 – Mon 2 Nov).
 - C12 (SAM) waits for spike numbers before tuning, but the parser and Files API lifecycle can be built against synthetic stream text.
 - C15 and C16 share the overlay geometry: agree on `fixtures/synthetic/overlay-geometry.json` first; both test against it.
 
@@ -106,24 +122,36 @@ Notes:
 | ID | When (SGT, target) | Merges | Integration check |
 |---|---|---|---|
 | IC1 | Wed 28 Oct, end of day | L0 | `pnpm check` green; schemas lint against Muse Spark limits; Convex dev deploys; every lane rebases |
-| IC2 | Thu 29 Oct, midday | L2 + L3 + L4 + L5 + L1 (status screen) | Walking skeleton: synthetic clip upload → job → sandbox (local, and Modal if T0.4 passed) → fake stages → screen 12 complete → sandbox released (`runs:sandboxes --open` empty) |
-| IC3 | Thu 29 Oct, end of day (checkpoint: decide cuts 6–9 trend) | C7, C8, C9 | Real spike clip: transcribe + plan produce remarks with verbatim words; stageRuns visible |
-| IC4 | Fri 30 Oct | C10–C14 | Real clip: per-remark 3–7 under the fan-out cap; one forced failure does not block others; 16 shows |
-| IC5 | Sat 31 Oct, 11:59 PM (end-to-end checkpoint; decide cuts 6–9) | C15, C16, review screens | Real clip on a phone: upload → status → playback with preview render or live overlay → review approve/move |
-| IC6 | Sun 1 Nov | C17, finalize | Share → student on a second device → code → lesson → focus; final render in a fresh sandbox released |
-| IC7 | Mon 2 Nov (feature freeze) | C18, C19, C20 | Deployed on the VM; E2E green; live smoke green; secret scan clean; demo fallback badge checked |
+| IC2 | Thu 29 Oct, midday | L2 + L3 + L4 + L5 + L1 (status screen, 07a) + C22 | Walking skeleton: synthetic clip upload → tap subject on 07a → job → sandbox (local, and Modal if T0.4 passed) → fake stages → screen 12 complete → sandbox released (`runs:sandboxes --open` empty) |
+| IC3a (new) | Thu 29 Oct, end of day (checkpoint: decide cuts 6–9 trend) | C7, C11, C12, C15 (preview) | Bala's **silent** clips in segment mode: selected person anchored from the tap, re-found and followed per delivery, no swap in ≥ 4/5, preview render shows one tracked person; stageRuns visible; sandbox released |
+| IC4 | Fri 30 Oct | C9, C10–C14 | Real video + **test-only fixture** remarks: plan → per-remark 3–7 under the fan-out cap; one forced failure does not block others; 16 shows (incl. swap variant); red TEST FIXTURE banner visible |
+| IC5a | Sat 31 Oct, 11:59 PM (end-to-end checkpoint; decide cuts 6–9, **without real-voice data**) | C15, C16, review screens | Real silent clip + test-only fixture on a phone: upload → tap subject → status → playback → review approve/move |
+| IC3 (moved) | Sun 1 Nov, 6 PM | C8 live, C9 prompt check | Bala's commentary clips (T0.8): T0.7 verdict; transcribe + plan produce remarks with verbatim words about the selected person |
+| IC5b | Sun 1 Nov, 11:59 PM | — (tuning) | Real commentary clip end to end with **no fixture**; candidate hero session for the demo chosen |
+| IC6 | Sun 1 Nov – Mon 2 Nov midday (slipped from Sun 1 Nov) | C17, finalize | Share → student on a second device → code → lesson → focus; final render in a fresh sandbox released; share refused for a test-fixture session in prod |
+| IC7 | Mon 2 Nov (feature freeze) | C18, C19, C20 | Deployed on the VM; E2E green; live smoke green on a **real commentary** clip; secret scan clean; `check-no-fixtures` green; test-fixture sessions deleted from prod; demo fallback badge checked |
 | IC8 | Tue 3 Nov | — | Demo video recorded (RUNBOOK checklist); package to Bala Wed 4 Nov 2 PM, internal submit target 8 PM; deadline Thu 5 Nov 10:00 AM |
+
+### 5.1 Schedule knock-on of "no voice until the weekend" (honest view)
+- **Real-voice prompt tuning is squeezed.** Stages 1–3 and 6 meet real commentary first on Sun 1 Nov; tuning has Sun 1 – Mon 2 Nov (about 1.5 days) before the freeze, instead of Thu 29 Oct – Mon 2 Nov.
+- **Voice Transcribe go/no-go moves from Wed 28 Oct to Sun 1 Nov.** If it fails then, the fallback (typed remarks, screen 14 path) has about one day to become the main path.
+- **The cut 6–9 decision on Sat 31 Oct is made without real-voice data**, using IC3a/IC4/IC5a evidence only.
+- **The demo hero clip depends on the weekend recording.** If commentary is not recorded by Sun 1 Nov 12 PM SGT, the Tue 3 Nov demo video is at risk; there is no voice-free substitute for the hero beat, because the test-only fixture can never appear in the demo.
+- **IC6 slips** about half a day (share/student checks overlap with voice tuning on Sun 1 / Mon 2 Nov). Freeze (Mon 2 Nov), demo (Tue 3 Nov), package to Bala (Wed 4 Nov 2 PM) and the deadline (Thu 5 Nov 10:00 AM SGT) are unchanged.
+- **What is pulled earlier:** stages 4–5 (subject tracking) and render now get real-clip testing from Thu 29 Oct, which reduces the biggest technical risk (SAM) earlier than in v1.
 
 ## 6. TASKS.md → lanes
 
 | Task | Lane | Chunk | Executor |
 |---|---|---|---|
-| T0.1, T0.2, T0.6 | H | H | Bala |
+| T0.1, T0.2, T0.6, T0.7, T0.8 | H | H | Bala (T0.7 with Codex running the script) |
 | T0.3, T0.4, T0.5 | Spike | — | Codex agent + Bala keys |
 | T1.01, T1.02, T1.03 | L0 (+L2 for functions) | C0, C2 | Codex lane agent |
 | T1.04 | L3 | C3 | Codex subagent + Bala keys |
 | T1.05, T1.06 | L4 | C4 | Codex lane agent |
 | T1.07, T1.13, T1.22 | L1 | C1 | Codex lane agent / subagents |
+| T1.35 | L1 (UI) + L2 (gating) | C21 | Codex lane agents |
+| T1.36 | L6 | C22 | Codex subagent |
 | T1.08, T1.09, T1.11, T1.12 | L5 | C5, C6, C7 | Codex lane agent |
 | T1.10 | L2 | C2 | Codex lane agent |
 | T1.14 – T1.21 | L6 | C8 – C15 | one Codex subagent per stage |

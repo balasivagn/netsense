@@ -8,8 +8,8 @@ NetSense is a coaching-workflow tool for cricket coaches. A coach films a net se
 
 1. **Film and talk.** Record on the phone camera or upload from the camera roll. Uploads resume if the connection drops.
 2. **Hear the remarks.** Muse Voice Transcribe turns the coach's speech into timed turns.
-3. **Match remarks to moments.** A Muse Spark planner splits the transcript into remarks; per-remark Muse Spark agents find the moment in the video and which player (batter or bowler) the remark is about.
-4. **Follow the players.** SAM 3.1 segments and tracks that player through the moment.
+3. **Match remarks to moments.** A Muse Spark planner splits the transcript into remarks; per-remark Muse Spark agents find the moment in the video and re-find the one player the coach selected (other people in frame are ignored).
+4. **Follow your player.** SAM 3.1 segments and tracks that one player through the moment.
 5. **Place and check marks.** Circles, arrows, highlights and labels are anchored to the tracked player, using the coach's own words or a neutral label. A rules checker verifies each mark.
 6. **Coach review.** Every AI placement or suggestion is a draft until the coach approves it, one at a time.
 7. **Private student link.** The student opens a link plus a 6-digit code and sees the marked-up moments, the coach's words (with the original audio), and a focus card.
@@ -21,8 +21,8 @@ The marks show what the coach said. They don't measure technique: NetSense does 
 | Model | Job |
 |---|---|
 | Muse Voice Transcribe (`muse-voice-transcribe-1.0`) | Coach's speech → diarized, timed turns |
-| Muse Spark (`muse-spark-1.3`) | Planner agent and per-remark agents: split remarks, find moments, pick the player, place marks, draft focus points |
-| SAM 3.1 (`sam-3.1`) | Find and track the batter or bowler for each remark |
+| Muse Spark (`muse-spark-1.3`) | Planner agent and per-remark agents: split remarks, find moments, re-find the selected player, place marks, draft focus points |
+| SAM 3.1 (`sam-3.1`) | Find and track the one player the coach selected, for each remark |
 
 ## Architecture
 

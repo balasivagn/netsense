@@ -6,7 +6,7 @@ For coding agents (Codex) and humans. Read this, then SPEC.md (what to build), T
 
 1. **Never commit secrets.** Secrets come from env vars only. `.env.example` holds names, never values. No keys, tokens, link codes, signed URLs or Clerk/Convex/Modal/R2/Meta credentials in code, tests, fixtures, logs, commit messages or docs. gitleaks runs in pre-commit and CI; do not bypass it (`--no-verify` is forbidden).
 2. **Keep the M1 path working at every step.** After every task: upload → status → review → share → student must still pass (`pnpm check`, and `pnpm e2e` once T1.31 exists). Swap fakes for real workers one stage at a time. Never leave `main` red.
-3. **No placeholder or fake data in anything that ships.** No lorem ipsum, invented names, made-up coach remarks or example numbers in UI, seed or docs. Synthetic test data lives only in `fixtures/synthetic/` and is never loaded by the running app. A demo fallback is a real processed session, labelled "Recorded run (fallback)" on screen (SPEC §22.4).
+3. **No placeholder or fake data in anything that ships.** No lorem ipsum, invented names, made-up coach remarks or example numbers in UI, seed or docs. Synthetic test data lives only in `fixtures/synthetic/`; test-only remarks live only in `fixtures/test-only/` (generated ones in git-ignored `local-fixtures/`), load only via the `fixture` provider outside prod, and never appear in the demo, screenshots, README, write-up or submission (SPEC §19.1). A demo fallback is a real processed session, labelled "Recorded run (fallback)" on screen (SPEC §22.4).
 4. **Coach words are verbatim.** Copy them from `transcriptTurns` by `turnId` in code. Models return ids and spans only. Byte-compare on persist.
 5. **Marks show what the coach said.** No bat, ball, speed, angle, distance, biomechanics or scores, in code, prompts or copy.
 6. **No bulk approve**, anywhere. AI items stay dashed and unapproved until the coach approves each one.
@@ -20,6 +20,7 @@ For coding agents (Codex) and humans. Read this, then SPEC.md (what to build), T
 
 ## Build order
 
+0. **Start with TASKS.md "Ready to test now"**: no paid keys, no voice. One person is tracked per session (the subject the coach taps); there is no coach commentary until Sat 31 Oct / Sun 1 Nov.
 1. M0 spike tasks (T0.*) are run with Bala (keys and real clips). Code tasks can start in parallel with the fake provider.
 2. Shared contracts first: T1.01 → T1.02 → T1.03. Nothing else merges until the contracts are frozen (WORKPLAN IC1). Changing a contract later needs a SPEC.md edit in the same change.
 3. Walking skeleton with fake workers (M1a) → real stages one at a time (M1b) → review, share, student (M1c) → ship (M1d).
@@ -42,6 +43,7 @@ spike/                    M0 feasibility scripts (clips and outputs git-ignored)
 scripts/                  CLIs: contracts gen, runs/cost views, demo export/import, secret scan
 tests/e2e/                Playwright end-to-end tests
 fixtures/synthetic/       Synthetic test-only data (never loaded by the app)
+fixtures/test-only/       Test-only remarks fixture template (never shipped; SPEC §19.1)
 docs/design/              Wireframes (design reference) and flow diagram
 docs/spike/               Spike results (numbers only, no footage)
 ```
@@ -65,6 +67,8 @@ docs/spike/               Spike results (numbers only, no footage)
 | `pnpm runs:show <jobId>` / `pnpm runs:sandboxes --open` / `pnpm cost:today` | observability CLIs |
 | `pnpm config:new` / `pnpm config:activate <v>` / `pnpm jobs:requeue <jobId>` / `pnpm jobs:retry <jobId> <stage>` | config versions and job re-queue (RUNBOOK §3.1, §2) |
 | `pnpm demo:export <sessionId>` / `pnpm demo:import` | labelled demo fallback (SPEC §22.4) |
+| `pnpm test-remarks:make` / `pnpm check:no-fixtures` / `pnpm runs:fixture-sessions` | test-only fixture tools and guards (SPEC §19.1) |
+| `pnpm jobs:segments <sessionId>` | segment mode: track the selected person per delivery on a silent clip (RUNBOOK §1.9) |
 | `pnpm check:env` | verify every name in `.env.example` is set (prints names only, never values) |
 | `scripts/secret-scan.sh` | gitleaks over the working tree and history |
 
