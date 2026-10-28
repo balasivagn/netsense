@@ -3,6 +3,8 @@ import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { appendFile, truncate, mkdir, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
+import { convexToJson, jsonToConvex } from "convex/values";
+import { makeFunctionReference } from "convex/server";
 import { api } from "../../../../convex/_generated/api";
 import { setup, tap, data } from "../../../../convex/tests/helpers";
 import { LocalVideoStorage } from "../storage/local";
@@ -13,12 +15,6 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("../coach-route-auth", () => ({
   getCoachRouteAuth: async () => state.auth,
-}));
-vi.mock("convex/browser", () => ({
-  ConvexHttpClient: class {
-    setAuth() {}
-    query = state.query;
-  },
 }));
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -45,7 +41,28 @@ async function harness() {
   const fetcher = vi.fn((url: string, init: RequestInit) =>
     c.t.fetch(new URL(url).pathname, init),
   );
-  vi.stubGlobal("fetch", fetcher);
+  // Exercise the actual ConvexHttpClient and its bounded fetch wrapper. Only
+  // the network boundary is in-process; query ownership still runs in Convex.
+  const transport = vi.fn(async (url: string, init: RequestInit) => {
+    expect(init.redirect).toBe("error");
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    if (new URL(url).pathname === "/api/query") {
+      expect(new Headers(init.headers).get("authorization")).toBe(
+        `Bearer ${state.auth!.convexToken}`,
+      );
+      const body = JSON.parse(init.body as string);
+      try {
+        const value = await state.query(
+          makeFunctionReference<"query">(body.path), jsonToConvex(body.args[0]),
+        );
+        return Response.json({ status: "success", value: convexToJson(value) });
+      } catch {
+        return Response.json({ status: "error", errorMessage: "NOT_FOUND" });
+      }
+    }
+    return fetcher(url, init);
+  });
+  vi.stubGlobal("fetch", transport);
   const storage = new LocalVideoStorage({
     rootDir: root,
     signingSecret: secret,
@@ -104,6 +121,7 @@ async function harness() {
     bytes,
     storage,
     fetcher,
+    transport,
     root,
     cleanup: () => rm(root, { recursive: true, force: true }),
   };
@@ -473,6 +491,101 @@ test("request bounds cancel oversized/stalled streams; R2 fails closed", async (
     expect(h.fetcher).not.toHaveBeenCalled();
   } finally {
     vi.useRealTimers();
+    await h.cleanup();
+  }
+});
+
+for (const boundary of ["query", "service"] as const)
+  for (const failure of ["oversized", "stalled"] as const)
+    test(`real client ${boundary} ${failure} response is bounded and cancelled`, async () => {
+      const h = await harness();
+      let cancelled = false;
+      try {
+        await h.coach.mutation(api.sessions.confirmConsent, { sessionId: h.sessionId });
+        const original = h.transport.getMockImplementation()!;
+        h.transport.mockImplementation(async (url, init) => {
+          const isQuery = new URL(url).pathname === "/api/query";
+          if (isQuery !== (boundary === "query")) return original(url, init);
+          return new Response(new ReadableStream<Uint8Array>({
+            start(controller) {
+              if (failure === "oversized") controller.enqueue(new Uint8Array(1048577));
+            },
+            cancel() { cancelled = true; },
+          }));
+        });
+        vi.useFakeTimers();
+        const pending = h.call("init", h.init);
+        if (failure === "stalled") await vi.advanceTimersByTimeAsync(10001);
+        const response = await pending;
+        expect(response.status).toBe(409);
+        expect(await response.json()).toEqual({ error: "UPLOAD_REJECTED" });
+        expect(cancelled).toBe(true);
+        expect(await h.t.run((ctx) => ctx.db.query("uploads").collect())).toHaveLength(0);
+      } finally {
+        vi.useRealTimers();
+        await h.cleanup();
+      }
+    });
+
+test("two completing requests overlap before storage finishes and enqueue once", async () => {
+  const h = await harness();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let entered!: () => void;
+  const bothEntered = new Promise<void>((resolve) => { entered = resolve; });
+  const original = LocalVideoStorage.prototype.completeMultipart;
+  let count = 0;
+  try {
+    const id = await h.start();
+    await h.coach.mutation(api.sessions.setSubject, { sessionId: h.sessionId, ...tap });
+    const part = await h.put(id);
+    await h.call("confirm", { partNumber: 1, ...part }, id);
+    vi.spyOn(LocalVideoStorage.prototype, "completeMultipart")
+      .mockImplementation(async function (this: LocalVideoStorage, ...args) {
+        if (++count === 2) entered();
+        await gate;
+        return original.apply(this, args);
+      });
+    const first = h.call("complete", {}, id);
+    const second = h.call("complete", {}, id);
+    await bothEntered;
+    expect((await h.call("abort", {}, id)).status).toBe(409);
+    release();
+    const responses = await Promise.all([first, second]);
+    expect(responses.map((r) => r.status)).toEqual([200, 200]);
+    expect(await responses[0].json()).toEqual(await responses[1].json());
+    expect(await h.t.run((ctx) => ctx.db.query("jobs").collect())).toHaveLength(1);
+  } finally {
+    release();
+    await h.cleanup();
+  }
+});
+
+test("abort reservation prevents completion while disk cleanup is still running", async () => {
+  const h = await harness();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let entered!: () => void;
+  const waiting = new Promise<void>((resolve) => { entered = resolve; });
+  const original = LocalVideoStorage.prototype.abortMultipart;
+  try {
+    const id = await h.start();
+    const part = await h.put(id);
+    await h.call("confirm", { partNumber: 1, ...part }, id);
+    vi.spyOn(LocalVideoStorage.prototype, "abortMultipart")
+      .mockImplementation(async function (this: LocalVideoStorage, ...args) {
+        entered();
+        await gate;
+        return original.apply(this, args);
+      });
+    const abort = h.call("abort", {}, id);
+    await waiting;
+    expect((await h.call("complete", {}, id)).status).toBe(409);
+    release();
+    expect((await abort).status).toBe(200);
+    expect(await h.t.run((ctx) => ctx.db.query("jobs").collect())).toHaveLength(0);
+  } finally {
+    release();
     await h.cleanup();
   }
 });

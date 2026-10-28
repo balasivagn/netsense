@@ -657,6 +657,15 @@ Key Convex functions (TypeScript, `convex/`):
 | `POST /api/uploads/[uploadId]/complete` | coach | `{}` → `{jobId: string|null}` (`null` while waiting for the subject tap). Completes multipart, `HEAD` checks size = `bytesTotal`, then `jobs.enqueue(kind="pipeline")` **only if `sessions.subject` is set**; otherwise the session waits in `subjectStatus = "needed"` and `sessions.setSubject` enqueues. SHA-256 is verified by `transcode`. |
 | `POST /api/uploads/[uploadId]/abort` | coach | → `{}` (asks first in the UI) |
 
+| `PUT /api/media/local/[...key]` | HMAC signed URL | local driver only: receives a part or file |
+| `GET /api/media/local/[...key]` | HMAC signed URL | local driver only: serves with `Range` support |
+| `POST /api/media/sign` | coach | `{sessionId, asset: "proxy"\|"preview"\|"final"\|"audio"\|"still:{annotationId}"\|"track:{remarkId}"}` → `{url, expiresAt}` (TTL `SIGNED_URL_TTL_SECONDS`, default 600) |
+| `POST /api/l/[token]/code` | public, rate-limited | `{code}` → `200 {ok}` + `ns_student` cookie, `401 {error:"wrong_code", attemptsLeft}`, `423 {error:"locked", retryAt}`, `410 {error:"stopped"}` |
+| `GET /api/l/[token]/lesson` | student cookie | → snapshot payload for the UI (no coach id, no other students) |
+| `POST /api/l/[token]/media` | student cookie | `{asset}` → signed URL for an asset in the snapshot only |
+| `POST /api/worker/sign` | worker job token | `{ops: [{op: "get"\|"put", key, contentType?}]}` → `{urls:[{op,key,url,expiresAt}]}` in request order; keys must be canonical keys strictly under `sessions/{sessionId}/` for the token's session. PUT requires `contentType`; GET forbids it. The route validates all operations before signing and returns no partial result. `expiresAt` is epoch milliseconds, capped by the token, live job lease and `SIGNED_URL_TTL_SECONDS` (default 600). |
+| `GET /api/health` | public | `{ok, version, convex: bool, storage: bool, orchestrator: {lastPollAt}}` (no secrets, no counts of users) |
+
 #### Local upload backend boundary (T1.06 / T1.37 partial)
 
 All five upload POST bodies are closed JSON objects, at most 32 KiB with a
@@ -691,8 +700,8 @@ Closed private request/response wires:
 |---|---|---|
 | reserve | `{sessionId,coachId,sha256,mimeType,bytesTotal,multipartUploadId}` | authoritative upload document |
 | confirm | `{uploadId,coachId,partNumber,etag,bytes}` | `{bytesConfirmed}` |
-| begin | `{uploadId,coachId,operation:"completing"|"aborting"}` | authoritative upload document |
-| complete | `{uploadId,coachId,verifiedBytes}` | `{jobId:string|null}` |
+| begin | `{uploadId,coachId,operation:"completing"\|"aborting"}` | authoritative upload document |
+| complete | `{uploadId,coachId,verifiedBytes}` | `{jobId:string\|null}` |
 | abort | `{uploadId,coachId}` | `{}` |
 
 An authoritative upload document contains the §9 upload fields plus Convex
@@ -731,14 +740,6 @@ Local locking supports the existing single web-process deployment only. R2 is
 **UNTESTED and unavailable** in this slice; the configured R2 adapter fails
 closed. UI consent/progress wiring, selection-frame fallback, real Clerk login,
 and Playwright/M1 E2E remain pending; T1.06/T1.37 are PARTIAL.
-| `PUT /api/media/local/[...key]` | HMAC signed URL | local driver only: receives a part or file |
-| `GET /api/media/local/[...key]` | HMAC signed URL | local driver only: serves with `Range` support |
-| `POST /api/media/sign` | coach | `{sessionId, asset: "proxy"\|"preview"\|"final"\|"audio"\|"still:{annotationId}"\|"track:{remarkId}"}` → `{url, expiresAt}` (TTL `SIGNED_URL_TTL_SECONDS`, default 600) |
-| `POST /api/l/[token]/code` | public, rate-limited | `{code}` → `200 {ok}` + `ns_student` cookie, `401 {error:"wrong_code", attemptsLeft}`, `423 {error:"locked", retryAt}`, `410 {error:"stopped"}` |
-| `GET /api/l/[token]/lesson` | student cookie | → snapshot payload for the UI (no coach id, no other students) |
-| `POST /api/l/[token]/media` | student cookie | `{asset}` → signed URL for an asset in the snapshot only |
-| `POST /api/worker/sign` | worker job token | `{ops: [{op: "get"\|"put", key, contentType?}]}` → `{urls:[{op,key,url,expiresAt}]}` in request order; keys must be canonical keys strictly under `sessions/{sessionId}/` for the token's session. PUT requires `contentType`; GET forbids it. The route validates all operations before signing and returns no partial result. `expiresAt` is epoch milliseconds, capped by the token, live job lease and `SIGNED_URL_TTL_SECONDS` (default 600). |
-| `GET /api/health` | public | `{ok, version, convex: bool, storage: bool, orchestrator: {lastPollAt}}` (no secrets, no counts of users) |
 
 ### 10.3 Convex `/svc/*` HTTP actions (orchestrator)
 Header `Authorization: Bearer ${CONVEX_SERVICE_SECRET}`. `POST /svc/jobs/claim` → job or `204`; `POST /svc/jobs/sandbox` `{jobId, sandboxId, sandboxName}`; `POST /svc/jobs/released` `{jobId, sandboxId, terminatedBy, exitCode}`; `POST /svc/jobs/fail` `{jobId, errorCode}`; `GET /svc/jobs/stale` → jobs `running` with `leaseUntil < now` or `heartbeatAt` older than `HEARTBEAT_STALE_S`; `GET /svc/sandboxes/open`.

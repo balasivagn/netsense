@@ -87,3 +87,17 @@ operator repair. Legacy uploads missing reservation/confirmed metadata are not
 silently migrated into the new local route flow. Completed local multipart parts
 remain on disk with the source until session deletion. Selection-frame fallback,
 transcode, anchor and tracking remain later work.
+
+## Parent review
+
+Parent validation replaces the mocked ConvexHttpClient with the actual client and
+its bounded transport. Only the network boundary dispatches in-process to the
+real Convex test queries/actions; Clerk remains a test seam. Added query/service
+oversized and stalled response tests with stream cancellation, two completion
+requests overlapping before disk completion, and abort winning while disk cleanup
+is still running. The public HTTP table in SPEC is kept contiguous.
+
+`pnpm exec vitest run apps/web/lib/upload/handler.test.ts`: **16 passed**.
+`pnpm check`: **333 JS, 383 runner, 33 orchestrator tests passed**, including
+lint, strict typechecks, contracts and offline bindings. This remains local test
+evidence, not live Clerk/Convex or browser E2E.
