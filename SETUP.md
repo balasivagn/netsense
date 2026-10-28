@@ -37,7 +37,7 @@ Yields: no env vars. Verify: each command prints a version.
 ## 1. Meta Model API key and credits
 
 1. Sign in to the Meta Model API developer console (link in the hackathon participant guide) with the account you registered for the hackathon.
-2. Add a payment method if asked, and check whether hackathon credits are applied (D8). Write the credit balance below.
+2. Add a payment method if asked, and check whether hackathon credits are applied (D8). Write the credit balance below. **Status (28 Oct):** BLOCKED until you confirm: you are adding your card and activating the account yourself (relayed via Chief of Staff). Tell the team when it is active so T0.1/T0.3 can proceed.
 3. Create an API key for **Standard** mode. Never use `-contributor` model IDs.
 4. Set a Billing **Spend Limit notification** (it only alerts; the app enforces its own `DAILY_SPEND_LIMIT_USD`).
 5. Put the key in `.env.local`:
@@ -183,9 +183,9 @@ Yields: `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`, `MODAL_APP_NAME`, `MODAL_RUNNER_
 
 ---
 
-## 5. Storage: Cloudflare R2 (only if S1 = R2)
+## 5. Storage: Cloudflare R2
 
-`DECISION PENDING (Bala)` S1. Skip this step if you choose VM disk (`STORAGE_DRIVER=local`, `LOCAL_STORAGE_DIR=/data/netsense`).
+S1 decided by Bala 28 Oct (relayed via Chief of Staff): Cloudflare R2, private, expiring links. `STORAGE_DRIVER=r2` is the default; `local` (`LOCAL_STORAGE_DIR`) is for laptop dev and tests only.
 
 1. Cloudflare dashboard → R2 → create bucket `netsense-media` (private; no public access, no custom domain).
 2. R2 → Manage API tokens → create a token with **Object Read & Write** scoped to that bucket only.
@@ -217,7 +217,7 @@ AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY 
 | Item | Notes |
 |---|---|
 | Date / time (SGT) | |
-| S1 choice | |
+| S1 | R2 (decided 28 Oct) |
 | Bucket / CORS set | |
 | Problems | |
 
@@ -226,10 +226,7 @@ AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY 
 ## 6. instabox VM
 
 1. Create a machine (Debian 13, 4 vCPU / 8 GiB, 20 GiB `/data`) using the instabox dashboard or CLI per its docs. Write the machine name below.
-2. **Plan check (I1):** free plan pauses the VM after 30 minutes idle and this cannot be turned off. A visit to the public URL wakes it. On a paid plan, turn auto-suspend off:
-```bash
-instabox auto-suspend <machine> 0      # paid plans only
-```
+2. **Plan (I1, decided by Bala 28 Oct (relayed via Chief of Staff)): free plan.** The VM pauses after 30 minutes idle and this cannot be turned off; Modal does the processing, so cost stays low. A visit to the public URL wakes it; wake it before every demo (RUNBOOK §3.3). (Only if you ever move to a paid plan: `instabox auto-suspend <machine> 0` turns auto-suspend off.)
 3. On the VM:
 ```bash
 sudo apt-get update && sudo apt-get install -y git curl ffmpeg build-essential
@@ -244,7 +241,7 @@ install -m 600 /dev/null /data/netsense/.env   # then paste values with an edito
 
 Verify: `curl -s https://<public-url>/api/health` returns `{"ok":true,...}`; `systemctl status netsense-web netsense-orchestrator` are active.
 
-Yields: `APP_BASE_URL`, `VM_API_BASE_URL`, `LOCAL_STORAGE_DIR` (if S1 = VM disk), `NETSENSE_ENV=prod`.
+Yields: `APP_BASE_URL`, `VM_API_BASE_URL`, `NETSENSE_ENV=prod` (prod uses `STORAGE_DRIVER=r2`; no `LOCAL_STORAGE_DIR` needed).
 
 **What I saw / notes:**
 | Item | Notes |
@@ -328,7 +325,7 @@ Remaining non-secret settings (pick values per SPEC §17–18, defaults there): 
 
 For spike, test and demo clips.
 
-- At least 2 clips, about 5–10 min each, ≥ 5 remarks each. Adults who agreed to be filmed only (D2, D3); note the agreement off-app.
+- At least 2 clips, about 5–10 min each, ≥ 5 remarks each. Adults who agreed to be filmed only, no minors (D3). Clips uploaded through the app need the consent checkbox on 06 ticked (C-C); spike clips used outside the app have no checkbox, so note the agreement off-app.
 - The coach talks about **one player** (the one you will tap on 07a) while filming. Other people in frame are fine; they are ignored.
 - Phone near the coach's voice (the coach films, or a second phone/mic close by); little wind; sound on.
 - Camera still (tripod or fence mount), the player large in frame and not hidden behind the net post for long.

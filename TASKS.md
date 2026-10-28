@@ -19,14 +19,14 @@ Effort (PROPOSAL, all unmeasured): minimum version ~11.0 dev-days, ~11.25–11.5
 ### T0.1 [HUMAN] [KEYS] Accounts and keys
 - Depends on: none
 - Files: none in repo (local `.env`, never committed)
-- Do: SETUP.md steps 1 (Meta), 4 (Modal), and 5 (R2) if S1 = R2.
+- Do: SETUP.md steps 1 (Meta), 4 (Modal), and 5 (R2; S1 decided).
 - Accept: `curl` to `/v1/models` lists `muse-spark-1.3`, `muse-voice-transcribe-1.0`, `sam-3.1`; `modal token` works; credits status recorded in SETUP.md notes.
 - Test: SETUP.md verify commands.
 
 ### T0.2 [HUMAN] Spike clips
 - Depends on: none
 - Files: none in repo (clips stay in `spike/clips/`, git-ignored)
-- Do: 2–3 real net clips, ≥ 5 deliveries (or segments) each, **several people in frame**, coach talking, adults who agreed to be filmed; record agreement off-app (D2). One iPhone (HEVC MOV) and one H.264 MP4 if possible. For each clip, Bala picks the subject once: fill `spike/clips/deliveries.csv` with `clip, delivery, startMs, endMs, subjectFrameMs, subjectX, subjectY` (x, y as 0–1 fractions of the frame; `spike/pick_subject.py` shows a frame and records the click).
+- Do: 2–3 real net clips, ≥ 5 deliveries (or segments) each, **several people in frame**, coach talking, adults who agreed to be filmed, no minors (D3); spike clips do not go through the app's consent checkbox, so record the agreement off-app. One iPhone (HEVC MOV) and one H.264 MP4 if possible. For each clip, Bala picks the subject once: fill `spike/clips/deliveries.csv` with `clip, delivery, startMs, endMs, subjectFrameMs, subjectX, subjectY` (x, y as 0–1 fractions of the frame; `spike/pick_subject.py` shows a frame and records the click).
 - Accept: clips present locally; `deliveries.csv` filled; agreement note recorded by Bala.
 - Test: n/a.
 
@@ -77,7 +77,8 @@ This chunk gets the repo to "ready to test" on a laptop with no Meta, Modal or R
 | 9 | T1.35 subject selection UI (07a) + `sessions.setSubject` | coach taps one person | free Clerk dev keys for the page; component tests need nothing |
 | 10 | T1.13 screen 12 | live status | free Convex + Clerk dev keys for E2E |
 | 11 | T1.20 + T1.21 with synthetic tracks | check rules incl. `subject_swap`; preview render of a single-subject track | nothing (they consume fake stage 6 output until T1.19 lands) |
-| — | **IC2** | synthetic clip → tap subject → job → local sandbox → fake stages → render → screen 12 done → sandbox released | Convex + Clerk free dev accounts (SETUP steps 2–3) |
+| 12 | T1.37 consent checkbox on 06 + upload guard | upload refused until the box is ticked | nothing for unit tests; free Clerk dev keys for the page |
+| — | **IC2** | synthetic clip → tick consent → tap subject → job → local sandbox → fake stages → render → screen 12 done → sandbox released | Convex + Clerk free dev accounts (SETUP steps 2–3) |
 
 Honest notes: no paid keys are needed for any row. Convex and Clerk free dev accounts are needed only for running the app and E2E (unit tests use `convex-test`). Running Convex fully local (`npx convex dev --local` style) is **UNTESTED** here; if it works it removes even that need.
 
@@ -123,6 +124,13 @@ Honest notes: no paid keys are needed for any row. Convex and Clerk free dev acc
 - Files: `apps/web/app/sessions/[id]/record/page.tsx`, `apps/web/app/sessions/[id]/upload/page.tsx`, `apps/web/lib/upload/{multipart,sha256,resume}.ts`, `apps/web/app/api/uploads/**/route.ts`, `convex/uploads.ts`
 - Accept: SPEC §4.1 and §10.2: progress counts confirmed parts only; resume after reload by matching SHA-256; 3 failed attempts mark "Upload failed"; `/complete` checks size and enqueues a `pipeline` job only once the subject is set (else routes to 07a); Cancel asks first.
 - Test: vitest for resume logic; Playwright uploads a synthetic clip, kills network mid-way, resumes.
+
+### T1.37 [S] Consent checkbox on the upload screen (06) + upload guard
+- Decision: C-C, D2, D3, decided by Bala 28 Oct (relayed via Chief of Staff). Minimal checkbox only; the full consent flow stays later.
+- Depends on: T1.03 (schema), T1.06 (screen 06 and `/api/uploads`)
+- Files: `apps/web/app/sessions/[id]/record/page.tsx` (checkbox), `apps/web/components/consent-checkbox.tsx`, `convex/schema.ts` (`sessions.consentConfirmedAt`, `consentConfirmedBy`), `convex/sessions.ts` (`confirmConsent`), `apps/web/app/api/uploads/route.ts` (guard), `packages/contracts/schemas/ErrorCode.json` (`CONSENT_REQUIRED`)
+- Accept: SPEC §3 and §4 screen 06: one required checkbox, unticked by default, copy "Everyone filmed in this clip is an adult and agreed to be filmed."; Open camera and Pick clip disabled until ticked; ticking stores `consentConfirmedAt` and `consentConfirmedBy` (owner only; idempotent); `POST /api/uploads` returns `409 CONSENT_REQUIRED` for a session without `consentConfirmedAt`, and no multipart upload or storage object is created; no other consent UI (no per-person records, no junior flow).
+- Test: convex-test `consent.test.ts` (non-owner rejected; fields set once; second call keeps the first values); vitest `uploads-consent.test.ts` (no consent → 409, storage adapter never called; consent → 200); Playwright: on 06 the buttons are disabled until the box is ticked, then the synthetic upload starts.
 
 ### T1.07 Sessions screens 02, 03, 04
 - Depends on: T1.04
@@ -172,7 +180,7 @@ Honest notes: no paid keys are needed for any row. Convex and Clerk free dev acc
 - Accept: SPEC §4 screen 07a: frame decoded locally from the picked file (no upload needed), scrub, tap → normalised point stored with `frameMs` and role; Retake; Confirm; "Pick after upload" fallback using server key frames when the browser cannot decode; pipeline enqueues only when upload complete + subject set; "Change who to follow" on 19 enqueues `subject_retrack`; copy says other people are ignored; no model names. **Design gap:** no wireframe for 07a; build with existing components and flag screenshots to Bala.
 - Test: vitest for point normalisation (portrait, landscape, letterboxed video); convex-test for gating in both orders; Playwright: synthetic clip → tap → job starts.
 
-**Checkpoint IC2 (walking skeleton):** synthetic upload → tap subject (07a) → job → sandbox (local driver; Modal if T0.4 passed) → fake stages → screen 12 complete → sandbox released.
+**Checkpoint IC2 (walking skeleton):** tick consent (06) → synthetic upload → tap subject (07a) → job → sandbox (local driver; Modal if T0.4 passed) → fake stages → screen 12 complete → sandbox released.
 
 ---
 
@@ -314,7 +322,7 @@ Honest notes: no paid keys are needed for any row. Convex and Clerk free dev acc
 - Accept: ≤ 3 min, storyboard SPEC §21, opening line about pre-existing vs built this week; adults-only footage; hero session follows one selected player.
 - Test: RUNBOOK pre-demo checklist.
 
-M1 task count: **35** (T1.01–T1.35), plus **6** M0 tasks (T0.1–T0.6). IDs are not renumbered; T1.35 sits in M1a and the "Ready to test now" chunk.
+M1 task count: **36** (T1.01–T1.35 and T1.37), plus **6** M0 tasks (T0.1–T0.6). IDs are not renumbered; T1.35 and T1.37 sit in M1a and the "Ready to test now" chunk. T1.36 is retired (it was used briefly in commit 9e65852 and reverted), so it is not reused.
 
 ---
 

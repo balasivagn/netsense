@@ -95,7 +95,7 @@ flowchart TD
 | L1 Web UI | Codex lane agent (+ S-tier subagents) | C1, C16, C21 (UI) | T1.07, T1.13, T1.35 (UI), T1.22, T1.23, T1.24, T1.25, UI part of T1.27 | L2, L4, L5, L6 |
 | L2 Convex functions | Codex lane agent | C2, C21 (gating) | T1.03 (functions part), T1.10, T1.35 (setSubject, gating), Convex parts of T1.22, T1.24, T1.25, T1.27 | L1, L4, L5, L6 |
 | L3 Auth | Codex subagent | C3 | T1.04 | everything; short |
-| L4 Upload + storage | Codex lane agent | C4 | T1.05, T1.06 | L1, L2, L5, L6 |
+| L4 Upload + storage | Codex lane agent | C4 | T1.05, T1.06, T1.37 (consent checkbox + upload guard) | L1, L2, L5, L6 |
 | L5 Runner + orchestrator | Codex lane agent | C5, C6, C7 | T1.08, T1.09, T1.11, T1.12 | L1, L2, L4, L6 |
 | L6 Stage workers | parallel Codex subagents, one per stage | C8–C15 | T1.14, T1.15, T1.16, T1.17, T1.18, T1.19, T1.20, T1.21, T1.26 | each other (contract-isolated, fake provider) |
 | L7 Student link | Codex lane agent | C17 | T1.27, T1.28 | L6 tail, L8 |
@@ -115,7 +115,7 @@ Notes:
 | ID | When (SGT, target) | Merges | Integration check |
 |---|---|---|---|
 | IC1 | Wed 28 Oct, end of day | L0 | `pnpm check` green; schemas lint against Muse Spark limits; Convex dev deploys; every lane rebases |
-| IC2 | Thu 29 Oct, midday | L2 + L3 + L4 + L5 + L1 (status screen, 07a) | Walking skeleton: synthetic clip upload → tap subject on 07a → job → sandbox (local, and Modal if T0.4 passed) → fake stages → screen 12 complete → sandbox released (`runs:sandboxes --open` empty) |
+| IC2 | Thu 29 Oct, midday | L2 + L3 + L4 + L5 + L1 (status screen, 07a) | Walking skeleton: tick consent on 06 → synthetic clip upload → tap subject on 07a → job → sandbox (local, and Modal if T0.4 passed) → fake stages → screen 12 complete → sandbox released (`runs:sandboxes --open` empty) |
 | IC3 | Thu 29 Oct, end of day (checkpoint: decide cuts 6–9 trend) | C7, C8, C9 | Real spike clip: transcribe + plan produce remarks with verbatim words; stageRuns visible |
 | IC4 | Fri 30 Oct | C10–C14 | Real clip: per-remark 3–7 under the fan-out cap; one forced failure does not block others; 16 shows (incl. swap variant); only the selected person is tracked |
 | IC5 | Sat 31 Oct, 11:59 PM (end-to-end checkpoint; decide cuts 6–9) | C15, C16, review screens | Real clip on a phone: upload → tap subject → status → playback with preview render or live overlay → review approve/move |
@@ -132,6 +132,7 @@ Notes:
 | T1.01, T1.02, T1.03 | L0 (+L2 for functions) | C0, C2 | Codex lane agent |
 | T1.04 | L3 | C3 | Codex subagent + Bala keys |
 | T1.05, T1.06 | L4 | C4 | Codex lane agent |
+| T1.37 | L4 (screen 06 + `/api/uploads` guard; the two `sessions` fields go through L2's schema PR or the same PR) | C4 | Codex subagent (S tier) |
 | T1.07, T1.13, T1.22 | L1 | C1 | Codex lane agent / subagents |
 | T1.35 | L1 (UI) + L2 (gating) | C21 | Codex lane agents |
 | T1.08, T1.09, T1.11, T1.12 | L5 | C5, C6, C7 | Codex lane agent |
