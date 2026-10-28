@@ -142,6 +142,7 @@ Compare against the Meta Billing page and the Modal usage page weekly. Target fr
 | Wed 28 Oct 2026, 3 PM | Bala: clips have several people, focus on one | Spec v1.1: one selected subject (F1, scope reduction), spike S-2…S-4 rewritten for the selected person, "Ready to test now" chunk added. A short-lived "no voice" schedule change (commit 9e65852) was reverted the same afternoon: missing commentary in early clips is a test-data gap, not a product change. |
 | Wed 28 Oct 2026, 3:15 PM | Bala: Codex pushes its own branch and opens PRs to `main` | AGENTS.md rule 13, WORKPLAN, SETUP §9 updated; Bala reviews and merges |
 | Wed 28 Oct 2026, 5 PM | Bala's decisions (relayed via Chief of Staff): C-C/D2/D3 minimal consent checkbox; S1 R2; I1 free plan; D8 blocked until Bala confirms | SPEC, TASKS (new T1.37), WORKPLAN (L4), DECISIONS, SETUP steps 1/5/6, RUNBOOK §3.3, `.env.example`, README. Still awaiting Bala: G1, C-P, M1, F4 (07a design), MW. |
+| Wed 28 Oct 2026 | T1.04 Clerk/Convex wiring | Next 16.4.3 uses `proxy.ts` (not `middleware.ts`). Proxy is only an early route filter; session layout and future coach route handlers still authenticate independently. Clerk ↔ Convex acceptance and real sign-in remain **UNTESTED** until SETUP steps 2–3 provide a configured Clerk instance, Convex deployment and `convex` JWT template/integration. |
 | | | |
 
 ### Foundation log / refinements — 28 Oct 2026
