@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from importlib.resources import files
 from typing import Mapping, Protocol
 
+from jsonschema import Draft202012Validator
+
 from netsense_runner.contract_validation import validate_contract
 from netsense_runner.json_types import JsonValue
 
@@ -75,11 +77,7 @@ def bundled_schema(contract_name: str) -> dict[str, JsonValue]:
             if reference_id in trail:
                 raise ValueError("SCHEMA_REFERENCE_INVALID")
             return resolve(copy.deepcopy(target), name, trail + (reference_id,))
-        return {
-            key: resolve(item, origin, trail)
-            for key, item in value.items()
-            if key != "$id"
-        }
+        return {key: resolve(item, origin, trail) for key, item in value.items() if key != "$id"}
 
     schema = resolve(copy.deepcopy(source[root_name]), root_name, (root_name,))
     if not isinstance(schema, dict):
@@ -88,7 +86,7 @@ def bundled_schema(contract_name: str) -> dict[str, JsonValue]:
 
 
 def specialize_enums(
-    schema: Mapping[str, JsonValue], replacements: Mapping[str, tuple[int, ...]]
+    schema: Mapping[str, JsonValue], replacements: Mapping[str, tuple[int | str, ...]]
 ) -> dict[str, JsonValue]:
     """Replace an enum at a slash-separated object path for a single model call."""
     result = copy.deepcopy(dict(schema))
@@ -99,6 +97,8 @@ def specialize_enums(
             if not isinstance(candidate, dict):
                 raise ValueError("SCHEMA_SPECIALIZATION_INVALID")
             node = candidate
+        if not enum or any(not Draft202012Validator(node).is_valid(item) for item in enum):
+            raise ValueError("SCHEMA_SPECIALIZATION_INVALID")
         node["enum"] = list(enum)
     return result
 
@@ -114,16 +114,24 @@ class AgentAdapter:
         prompt: str,
         output_contract: str,
         images: tuple[ImageInput, ...] = (),
-        enum_specializations: Mapping[str, tuple[int, ...]] | None = None,
+        enum_specializations: Mapping[str, tuple[int | str, ...]] | None = None,
+        system_prompt: str | None = None,
     ) -> object:
         schema = bundled_schema(output_contract)
         if enum_specializations:
             schema = specialize_enums(schema, enum_specializations)
-        content: list[JsonValue] = [{"type": "input_text", "text": prompt}]
+        # Chat Completions uses text/image_url, not Responses' input_text/input_image.
+        # Documented shape; live vendor acceptance remains UNTESTED.
+        content: list[JsonValue] = [{"type": "text", "text": prompt}]
         content.extend(image.as_content() for image in images)
+        messages: list[JsonValue] = []
+        if system_prompt is not None:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": content})
         request: dict[str, JsonValue] = {
             "model": model,
-            "messages": [{"role": "user", "content": content}],
+            "messages": messages,
+            "temperature": 0.2,
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {"name": output_contract, "schema": schema, "strict": True},
@@ -131,6 +139,12 @@ class AgentAdapter:
         }
         try:
             response = self._transport.complete(request)
+        except Exception:
+            # Transport exceptions can contain credentials, prompt text or signed URLs.
+            raise AgentResponseError("INFRA_NETWORK") from None
+        try:
+            if not Draft202012Validator(schema).is_valid(json.loads(response)):
+                raise ValueError("CONTRACT_INVALID")
             return validate_contract(output_contract, response)
         except (ValueError, TypeError, json.JSONDecodeError):
             raise AgentResponseError("CONTRACT_INVALID") from None

@@ -22,7 +22,7 @@ class Usage(TypedDict):
 
 class StageTrace(TypedDict, total=False):
     toolCalls: int
-    framesViewed: int
+    framesViewed: list[int]
     whyThisPlayer: str
 
 

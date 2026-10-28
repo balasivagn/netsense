@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Iterator, Mapping, cast
@@ -12,6 +13,7 @@ from netsense_runner.adapters.agent import (
     AgentResponseError,
     ImageInput,
     bundled_schema,
+    specialize_enums,
 )
 from netsense_runner.adapters.model_api import ModelApiAdapter, TranscriptionRequest
 from netsense_runner.adapters.rules import RulesAdapter
@@ -53,7 +55,7 @@ def test_agent_adapter_sends_strict_schema_and_data_url() -> None:
     assert message == {
         "role": "user",
         "content": [
-            {"type": "input_text", "text": "fixture instruction"},
+            {"type": "text", "text": "fixture instruction"},
             {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,AAE="}},
         ],
     }
@@ -73,6 +75,52 @@ def test_agent_adapter_rejects_invalid_model_contract_without_raw_response() -> 
         AgentAdapter(transport).complete(
             model="configured-model", prompt="fixture", output_contract="MomentModelOutput"
         )
+
+
+def test_agent_enforces_the_specialized_schema_on_the_response() -> None:
+    response = (FIXTURES / "MomentModelOutput.json").read_text()
+    with pytest.raises(AgentResponseError, match="CONTRACT_INVALID"):
+        AgentAdapter(RecordedAgentTransport(response)).complete(
+            model="configured-model",
+            prompt="fixture",
+            output_contract="MomentModelOutput",
+            enum_specializations={"/properties/startIdx": (1,)},
+        )
+
+
+def test_string_enums_can_be_narrowed_but_not_broadened() -> None:
+    schema = bundled_schema("MomentModelOutput")
+    narrowed = specialize_enums(schema, {"/properties/confidence": ("high",)})
+    assert narrowed != schema
+    with pytest.raises(ValueError, match="SCHEMA_SPECIALIZATION_INVALID"):
+        specialize_enums(schema, {"/properties/confidence": ("invalid",)})
+    with pytest.raises(ValueError, match="SCHEMA_SPECIALIZATION_INVALID"):
+        specialize_enums(schema, {"/properties/confidence": ()})
+
+
+def test_agent_system_preamble_and_transport_error_do_not_leak() -> None:
+    response = (FIXTURES / "MomentModelOutput.json").read_text()
+    transport = RecordedAgentTransport(response)
+    AgentAdapter(transport).complete(
+        model="configured-model",
+        prompt="fixture",
+        output_contract="MomentModelOutput",
+        system_prompt="fixture instruction",
+    )
+    assert transport.request is not None
+    assert transport.request["temperature"] == 0.2
+    messages = cast(list[dict[str, object]], transport.request["messages"])
+    assert messages[0] == {"role": "system", "content": "fixture instruction"}
+
+    class FailingTransport:
+        def complete(self, request: Mapping[str, object]) -> str:
+            raise RuntimeError(response)
+
+    with pytest.raises(AgentResponseError) as raised:
+        AgentAdapter(FailingTransport()).complete(
+            model="configured-model", prompt="fixture", output_contract="MomentModelOutput"
+        )
+    assert str(raised.value) == "INFRA_NETWORK"
 
 
 def test_agent_schema_bundles_cross_file_references() -> None:
@@ -106,9 +154,12 @@ class RecordedModelTransport:
 def test_model_api_adapter_uses_injectable_nonchat_transports() -> None:
     transport = RecordedModelTransport()
     adapter = ModelApiAdapter(transport)
-    assert adapter.transcribe(
-        TranscriptionRequest("voice", ("one",), ("English",), b"wav", "chunk.wav")
-    ) == "{}"
+    assert (
+        adapter.transcribe(
+            TranscriptionRequest("voice", ("one",), ("English",), b"wav", "chunk.wav")
+        )
+        == "{}"
+    )
     expected_request = json.dumps(
         {
             "mode": "DIARIZATION",
@@ -126,7 +177,9 @@ def test_model_api_adapter_uses_injectable_nonchat_transports() -> None:
     )
     assert list(adapter.responses_stream("sam", [{"type": "input_video"}])) == ["event"]
     assert transport.stream_payload == {
-        "model": "sam", "stream": True, "input": [{"type": "input_video"}]
+        "model": "sam",
+        "stream": True,
+        "input": [{"type": "input_video"}],
     }
 
 
@@ -144,6 +197,24 @@ def test_fake_provider_requires_explicit_nonproduction_environment(
         FakeProvider.from_environment(FIXTURES)
     provider = FakeProvider(FIXTURES, "test")
     assert json.loads(provider.response("MomentModelOutput.json"))["confidence"] == "high"
+
+
+def test_fake_constructor_cannot_override_production_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NETSENSE_ENV", "prod")
+    with pytest.raises(FakeProviderRefused):
+        FakeProvider(FIXTURES, "test")
+
+
+def test_fake_provider_rejects_nonfixture_root_and_symlink_escape(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="FAKE_FIXTURE_INVALID"):
+        FakeProvider(tmp_path, "test")
+    root = tmp_path / "fixtures" / "synthetic" / "adapters"
+    root.mkdir(parents=True)
+    (root / "escape.json").symlink_to(FIXTURES / "MomentModelOutput.json")
+    with pytest.raises(ValueError, match="FAKE_FIXTURE_INVALID"):
+        FakeProvider(root, "test").response("escape.json")
 
 
 def test_gemini_stub_is_not_configured() -> None:
@@ -172,6 +243,33 @@ def test_tool_failure_scrubs_url_and_cleanup_returns() -> None:
         )
     assert "hidden.invalid" not in " ".join(raised.value.__notes__)
     assert ToolAdapter().run((sys.executable, "-c", "print('ok')"), timeout_s=1).stdout == b"ok\n"
+
+
+def test_tool_redacts_plain_text_not_just_urls() -> None:
+    script = "import pathlib,sys;sys.stderr.write(pathlib.Path(sys.argv[1]).read_text())"
+    result = ToolAdapter().run(
+        (sys.executable, "-c", script, str(FIXTURES / "MomentModelOutput.json")),
+        timeout_s=1,
+    )
+    assert result.stderr == "TOOL_STDERR_REDACTED"
+
+
+def test_tool_cancellation_also_reaps_the_child(monkeypatch: pytest.MonkeyPatch) -> None:
+    spawned: list[subprocess.Popen[bytes]] = []
+
+    def interrupted(
+        process: subprocess.Popen[bytes],
+        input: bytes | None = None,
+        timeout: float | None = None,
+    ) -> tuple[bytes, bytes]:
+        spawned.append(process)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(subprocess.Popen, "communicate", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        ToolAdapter().run((sys.executable, "-c", "import time;time.sleep(30)"), timeout_s=1)
+    assert len(spawned) == 1
+    assert spawned[0].poll() is not None
 
 
 def test_rules_are_deterministic() -> None:

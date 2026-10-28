@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import signal
 import subprocess
@@ -21,13 +22,14 @@ class ToolResult:
 
 
 def _scrub(stderr: bytes) -> str:
-    """Keep bounded diagnostics but never URLs/query strings that can contain signed credentials."""
-    decoded = stderr.decode("utf-8", errors="replace")
-    return " ".join(part for part in decoded.split() if "://" not in part and "=" not in part)[:500]
+    """Arbitrary tool output can contain plain credentials or transcript text."""
+    return "TOOL_STDERR_REDACTED" if stderr else ""
 
 
 class ToolAdapter:
     def run(self, command: tuple[str, ...], *, timeout_s: float) -> ToolResult:
+        if not math.isfinite(timeout_s) or timeout_s <= 0:
+            raise ValueError("INVALID_TOOL_TIMEOUT")
         try:
             process = subprocess.Popen(
                 command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
@@ -37,9 +39,19 @@ class ToolAdapter:
         try:
             stdout, stderr = process.communicate(timeout=timeout_s)
         except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.communicate()
             raise ToolExecutionError("STAGE_TIMEOUT") from None
+        finally:
+            # Also clean up on cancellation or a communicate failure. A successful
+            # parent may have left descendants in its process group.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait()
+            if process.stdout is not None:
+                process.stdout.close()
+            if process.stderr is not None:
+                process.stderr.close()
         if process.returncode != 0:
             error = ToolExecutionError("INFRA_EXEC")
             error.add_note(_scrub(stderr))

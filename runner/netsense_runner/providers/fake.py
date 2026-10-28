@@ -18,9 +18,13 @@ class FakeProvider(Provider):
 
     def __init__(self, fixture_root: Path, environment: str) -> None:
         normalized = environment.strip().lower()
-        if not normalized or normalized.startswith("prod"):
+        actual = os.environ.get("NETSENSE_ENV", "").strip().lower()
+        if not normalized or normalized.startswith("prod") or actual.startswith("prod"):
             raise FakeProviderRefused("FAKE_PROVIDER_REFUSED")
-        self._fixture_root = fixture_root
+        self._fixture_root = fixture_root.resolve()
+        parts = self._fixture_root.parts
+        if not any(parts[i : i + 2] == ("fixtures", "synthetic") for i in range(len(parts) - 1)):
+            raise ValueError("FAKE_FIXTURE_INVALID")
 
     @classmethod
     def from_environment(cls, fixture_root: Path) -> "FakeProvider":
@@ -32,6 +36,8 @@ class FakeProvider(Provider):
     def response(self, fixture_name: str) -> str:
         path = self._fixture_root / fixture_name
         if path.parent != self._fixture_root or path.suffix != ".json":
+            raise ValueError("FAKE_FIXTURE_INVALID")
+        if path.resolve().parent != self._fixture_root:
             raise ValueError("FAKE_FIXTURE_INVALID")
         try:
             value = json.loads(path.read_text())

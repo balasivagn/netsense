@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 import threading
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from netsense_runner.budget import Budget, BudgetExceeded
-from netsense_runner.contracts.PipelineConfig import PipelineConfig
+from netsense_runner.contracts.PipelineConfig import Limits, PipelineConfig
 from netsense_runner.registry import ProviderRegistry
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,14 +27,14 @@ class LockedLedger:
             return True
 
 
-def limits() -> object:
+def limits() -> Limits:
     config_path = ROOT / "config/pipeline_config.v1.json"
     config = PipelineConfig.model_validate(json.loads(config_path.read_text()))
     return config.limits
 
 
 def test_budget_concurrent_reservations_cannot_exceed_pinned_cap() -> None:
-    budget = Budget(limits(), LockedLedger())  # type: ignore[arg-type]
+    budget = Budget(limits(), LockedLedger())
     errors: list[str] = []
 
     def reserve() -> None:
@@ -53,7 +54,7 @@ def test_budget_concurrent_reservations_cannot_exceed_pinned_cap() -> None:
 
 def test_budget_cache_hits_do_not_charge_and_daily_preflight_is_atomic() -> None:
     ledger = LockedLedger()
-    budget = Budget(limits(), ledger)  # type: ignore[arg-type]
+    budget = Budget(limits(), ledger)
     budget.reserve_sam_frames(7000, cache_hit=True)
     budget.reserve_spark_tokens(500000, 1, cache_hit=True)
     assert budget.usage.sam_frames == 0
@@ -61,6 +62,30 @@ def test_budget_cache_hits_do_not_charge_and_daily_preflight_is_atomic() -> None
     with pytest.raises(BudgetExceeded, match="BUDGET_DAILY"):
         budget.reserve_spend(6)
     assert budget.usage.reserved_usd == 10
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -1.0, True])
+def test_budget_rejects_invalid_usage_before_charging(invalid: float) -> None:
+    ledger = LockedLedger()
+    budget = Budget(limits(), ledger)
+    with pytest.raises(ValueError):
+        budget.reserve_spend(invalid)
+    with pytest.raises(ValueError):
+        budget.reserve_sam_frames(cast(int, invalid))
+    with pytest.raises(ValueError):
+        budget.reserve_spark_tokens(cast(int, invalid), 0)
+    assert budget.usage.reserved_usd == 0
+    assert budget.usage.sam_frames == budget.usage.spark_tokens == 0
+    assert ledger.total == 0
+
+
+def test_budget_keeps_a_private_copy_of_pinned_limits() -> None:
+    pinned = limits()
+    budget = Budget(pinned, LockedLedger())
+    cap = pinned.jobSamFrameCap
+    pinned.jobSamFrameCap = cap + 100
+    with pytest.raises(BudgetExceeded):
+        budget.reserve_sam_frames(cap + 1)
 
 
 class TestProvider:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 from threading import Lock
 from typing import Protocol
 
@@ -30,7 +31,7 @@ class BudgetUsage:
 
 class Budget:
     def __init__(self, limits: Limits, daily_ledger: DailySpendLedger) -> None:
-        self._limits = limits
+        self._limits = limits.model_copy(deep=True)
         self._daily_ledger = daily_ledger
         self._lock = Lock()
         self._sam_frames = 0
@@ -38,7 +39,7 @@ class Budget:
         self._reserved_usd = 0.0
 
     def reserve_sam_frames(self, frames: int, *, cache_hit: bool = False) -> None:
-        if frames < 0:
+        if type(frames) is not int or frames < 0:
             raise ValueError("frames must be non-negative")
         if cache_hit:
             return
@@ -50,7 +51,12 @@ class Budget:
     def reserve_spark_tokens(
         self, input_tokens: int, output_tokens: int, *, cache_hit: bool = False
     ) -> None:
-        if input_tokens < 0 or output_tokens < 0:
+        if (
+            type(input_tokens) is not int
+            or type(output_tokens) is not int
+            or input_tokens < 0
+            or output_tokens < 0
+        ):
             raise ValueError("tokens must be non-negative")
         if cache_hit:
             return
@@ -61,7 +67,7 @@ class Budget:
             self._spark_tokens += tokens
 
     def reserve_spend(self, amount_usd: float, *, cache_hit: bool = False) -> None:
-        if amount_usd < 0:
+        if isinstance(amount_usd, bool) or not isfinite(amount_usd) or amount_usd < 0:
             raise ValueError("amount_usd must be non-negative")
         if cache_hit or amount_usd == 0:
             return
