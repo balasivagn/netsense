@@ -443,7 +443,7 @@ def test_failure_isolation_and_bounded_concurrent_fanout(harness: Harness) -> No
     assert "synthetic private" not in str(result)
 
 
-@pytest.mark.parametrize("bad", ["nan", "status", "output", "usage", "error"])
+@pytest.mark.parametrize("bad", ["nan", "status", "output", "usage", "error", "missing_usage"])
 def test_bad_stage_results_fail_before_persist(harness: Harness, bad: str) -> None:
     def broken(
         worker: StageWorker, value: Mapping[str, JsonValue], ctx: StageContext
@@ -457,6 +457,8 @@ def test_bad_stage_results_fail_before_persist(harness: Harness, bad: str) -> No
             result["output"] = {"turns": [], "audioDurationMs": -1, "providerSessionIds": []}
         elif bad == "usage":
             result["usage"]["samFrames"] = -1
+        elif bad == "missing_usage":
+            del result["usage"]  # type: ignore[misc]
         else:
             result["error_code"] = "private error"
         return result
@@ -465,6 +467,10 @@ def test_bad_stage_results_fail_before_persist(harness: Harness, bad: str) -> No
     result = harness.runner.run()
     assert result.error_code == "CONTRACT_INVALID"
     assert not any(p.endswith("/turns") for p, _, _ in harness.api.state.persists)
+    assert any(
+        f.errorCode and f.errorCode.root == "CONTRACT_INVALID"
+        for f in harness.api.state.finishes.values()
+    )
     assert harness.cleaned == [True] and len(harness.api.state.done) == 1
 
 
@@ -612,7 +618,9 @@ def test_swap_checker_prevents_swapped_marks_from_render(harness: Harness) -> No
     h.runner.workers[(stage.workerId, "TrackInput")] = lambda _: FakeWorker(
         stage.workerId, "TrackInput", FIXTURES, h.store, stream_fixture="stream_swap.json"
     )
-    assert h.runner.run().status == "waiting_for_coach"
+    outcome = h.runner.run()
+    assert outcome.status == "waiting_for_coach" and outcome.error_code is None
+    assert set(outcome.branch_errors.values()) == {"SUBJECT_SWAP"}
     key = next(k for k in h.store.values if k.endswith("render-test-stub.json"))
     assert json.loads(h.store.read(key))["input"]["annotations"] == []
     tracks = [
@@ -818,3 +826,49 @@ def test_cleanup_failure_does_not_repeat_done(harness: Harness) -> None:
     harness.runner.cleanup = broken_cleanup
     assert harness.runner.run().status == "failed"
     assert len(harness.api.state.done) == 1 and harness.runner.heartbeat_stopped.is_set()
+    assert harness.api.state.done[0].status == "failed"
+    assert (
+        harness.api.state.done[0].errorCode
+        and harness.api.state.done[0].errorCode.root == "INFRA_EXEC"
+    )
+
+
+@pytest.mark.parametrize("code", ["RENDER_FAIL", "STAGE_TIMEOUT"])
+def test_preview_failure_reaches_terminal_wire(harness: Harness, code: str) -> None:
+    def fail(worker: StageWorker, value: Mapping[str, JsonValue], ctx: StageContext) -> StageResult:
+        return {
+            "status": "failed",
+            "output": None,
+            "error_code": code,
+            "usage": {"samFrames": 0, "inputTokens": 0, "outputTokens": 0, "audioSeconds": 0},
+            "cost_usd": 0.0,
+            "trace": None,
+        }
+
+    harness.wrap("render", fail)
+    outcome = harness.runner.run()
+    assert outcome.status == "waiting_for_coach" and outcome.error_code == "RENDER_FAIL"
+    done = harness.api.state.done[0]
+    assert (
+        done.status == "waiting_for_coach"
+        and done.errorCode
+        and done.errorCode.root == "RENDER_FAIL"
+    )
+    assert not any(path.endswith("/render") for path, _, _ in harness.api.state.persists)
+
+
+def test_checker_bad_input_does_not_count_as_stage_five_failure(harness: Harness) -> None:
+    def fail(worker: StageWorker, value: Mapping[str, JsonValue], ctx: StageContext) -> StageResult:
+        return {
+            "status": "failed",
+            "output": None,
+            "error_code": "SEG_BAD_INPUT",
+            "usage": {"samFrames": 0, "inputTokens": 0, "outputTokens": 0, "audioSeconds": 0},
+            "cost_usd": 0.0,
+            "trace": None,
+        }
+
+    harness.wrap("check", fail)
+    outcome = harness.runner.run()
+    assert outcome.status == "waiting_for_coach" and outcome.error_code is None
+    assert set(outcome.branch_errors.values()) == {"SEG_BAD_INPUT"}

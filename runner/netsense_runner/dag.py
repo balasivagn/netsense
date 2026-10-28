@@ -55,6 +55,7 @@ class Completed:
     worker_id: str
     model: str | None
     annotations: dict[str, str] = field(default_factory=dict)
+    error_code: str | None = None
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,8 @@ class Runner:
         self._deadline = float("inf")
         self._budget_failure: str | None = None
         self._budget_lock = threading.Lock()
+        self._tracked_outcomes: list[TrackedRemark] = []
+        self._render_error: str | None = None
 
     def _heartbeat(self) -> None:
         try:
@@ -144,6 +147,8 @@ class Runner:
         self._heartbeat_failed.clear()
         self.heartbeat_stopped.clear()
         self._budget_failure = None
+        self._tracked_outcomes = []
+        self._render_error = None
         heartbeat = threading.Thread(target=self._heartbeat, name="runner-heartbeat")
         heartbeat.start()
         try:
@@ -168,10 +173,14 @@ class Runner:
             status, error = "waiting_for_coach", None
             if self._budget_failure is not None:
                 status, error = "failed", self._budget_failure
-            tracked = [TrackedRemark("tracked", code) for code in errors.values()]
-            tracked += [TrackedRemark("tracked", None)] * self._successful_branches
-            if error is None and should_route_to_stills(tracked, job.config.params.stillsThreshold):
-                error = "SEG_NO_TRACK"
+            if error is None:
+                error = (
+                    "SEG_NO_TRACK"
+                    if should_route_to_stills(
+                        self._tracked_outcomes, job.config.params.stillsThreshold
+                    )
+                    else self._render_error
+                )
         except DagFailure as failure:
             error = failure.code
             if error in {"SUBJECT_NEEDED", "NO_SPEECH"}:
@@ -182,14 +191,14 @@ class Runner:
             self._stop.set()
             heartbeat.join()  # HTTP implementation must bound its own I/O.
             try:
-                self.client.done(status=status, error_code=error)
+                self.cleanup()  # Owned resources only; always after workers have returned.
             except Exception:
-                status, error = "failed", "INFRA_NETWORK"
+                status, error = "failed", "INFRA_EXEC"
             finally:
                 try:
-                    self.cleanup()  # Owned resources only; always after workers have returned.
+                    self.client.done(status=status, error_code=error)
                 except Exception:
-                    status, error = "failed", "INFRA_EXEC"
+                    status, error = "failed", "INFRA_NETWORK"
         return Outcome(status, error, errors)
 
     def _resume(
@@ -329,6 +338,7 @@ class Runner:
                 remark_id=remark,
             )
             result: StageResult | None = None
+            result_valid = False
             output_ref: str | None = None
             error: str | None = None
             status: Literal["done", "failed", "skipped", "needs_coach"] = "failed"
@@ -353,6 +363,7 @@ class Runner:
                 )
                 result = worker.run(value, ctx)
                 self._validate_result(result)
+                result_valid = True
                 validated(
                     "StageRun",
                     {
@@ -427,18 +438,19 @@ class Runner:
                 status, error = "failed", "CONTRACT_INVALID"
             except Exception:
                 status, error = "failed", "INFRA_EXEC"
+            # Only a validated result can contribute usage to a failed attempt.
+            if not result_valid:
+                result = None
             usage = (
                 result["usage"]
                 if result is not None
-                else {"samFrames": 0, "inputTokens": 0, "outputTokens": 0, "audioSeconds": 0}
+                else {
+                    "samFrames": 0,
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "audioSeconds": 0,
+                }
             )
-            # A malformed result never reaches the wire as malformed usage.
-            try:
-                if result is not None:
-                    self._validate_result(result)
-            except (ValueError, TypeError, KeyError):
-                usage = {"samFrames": 0, "inputTokens": 0, "outputTokens": 0, "audioSeconds": 0}
-                result = None
             self.client.finish_stage(
                 stage_run_id=run_id,
                 status=status,
@@ -450,7 +462,7 @@ class Runner:
                 error_code=error,
             )
             if status == "done" or (status == "needs_coach" and output_ref is not None):
-                return Completed(output, run_id, worker.id, pinned.model, annotations)
+                return Completed(output, run_id, worker.id, pinned.model, annotations, error)
             if (
                 status != "failed"
                 or attempt > pinned.retry
@@ -617,11 +629,13 @@ class Runner:
         }
         errors: dict[str, str] = {}
         results: list[tuple[Remark, Completed, Completed, Completed]] = []
+        track_errors: dict[str, str] = {}
 
         def branch(
             item: tuple[int, Remark],
         ) -> tuple[Remark, tuple[Completed, Completed, Completed] | None, str | None]:
             index, remark = item
+            phase = "moment"
             try:
                 previous = previous_times[remark.remarkId]
                 number = numbers[remark.remarkId]
@@ -632,6 +646,7 @@ class Runner:
                     remark=remark.remarkId,
                 )
                 moment = MomentOutput.model_validate(model_value(mrun.output))
+                phase = "subject"
                 srun = self._execute(
                     "subject",
                     build.subject_input(remark, moment, anchor, frames, job.session.subjectRole),
@@ -639,12 +654,14 @@ class Runner:
                     remark=remark.remarkId,
                 )
                 target = SubjectOutput.model_validate(model_value(srun.output))
+                phase = "track"
                 trun = self._execute(
                     "track",
                     build.track_input(remark, moment, target, media, proxy_hash, job),
                     TrackOutput,
                     remark=remark.remarkId,
                 )
+                phase = "place"
                 track = TrackOutput.model_validate(model_value(trun.output))
                 file = TrackFile.model_validate(
                     model_value(self.artifacts.output(track.fileRef, "TrackFile"))
@@ -666,6 +683,7 @@ class Runner:
                     ),
                 )
                 place = PlaceOutput.model_validate(model_value(prun.output))
+                phase = "check"
                 crun = self._execute(
                     "check",
                     {
@@ -684,8 +702,10 @@ class Runner:
                     remark=remark.remarkId,
                     number=number,
                 )
-                return remark, (prun, trun, crun), None
+                return remark, (prun, trun, crun), crun.error_code
             except DagFailure as failure:
+                if phase == "track":
+                    track_errors[remark.remarkId] = failure.code
                 return remark, None, failure.code
             except Exception:
                 return remark, None, "INFRA_EXEC"
@@ -697,9 +717,13 @@ class Runner:
             ):
                 if completed:
                     results.append((remark, *completed))
-                elif error:
+                if error:
                     errors[remark.remarkId] = error
-        self._successful_branches = len(results)
+        self._tracked_outcomes = [
+            TrackedRemark("tracked", track_errors.get(r.remarkId))
+            for r in ordered
+            if r.aboutSubject in {"yes", "unclear"}
+        ]
         annotations: list[JsonValue] = []
         segments: list[JsonValue] = []
         for remark, prun, trun, crun in results:
@@ -756,4 +780,5 @@ class Runner:
         except DagFailure as failure:
             if failure.code not in {"RENDER_FAIL", "STAGE_TIMEOUT"}:
                 raise
+            self._render_error = "RENDER_FAIL"
         return errors

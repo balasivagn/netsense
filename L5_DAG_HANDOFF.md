@@ -181,3 +181,11 @@ T1.09 remains **PARTIAL**, with these frozen-interface limitations explicit:
   gitleaks hook. The actual commit hook is also run, without bypass.
 - `git diff --check`: PASS. Scratch logs, generated clips and tool downloads
   remain ignored and unstaged. No full app E2E or live vendor success claimed.
+
+## Parent integration review
+
+The reviewed HTTP transport from PR12 (`a9982c9`) is included. Preview worker `RENDER_FAIL` and render `STAGE_TIMEOUT` now reach `/worker/done` as `RENDER_FAIL`, preserving the live-overlay route rather than silently reporting no error. Checker `needs_coach` outputs retain their per-remark errors. The stills threshold counts only failures from stage 5, as §7.7 requires; a checker `SEG_BAD_INPUT` does not count as a stage-5 failure. Malformed worker results with missing usage finish their attempt with safe zero usage and `CONTRACT_INVALID`. Owned cleanup runs before the single terminal done attempt so cleanup failure is reported as failed.
+
+Review validation: `pnpm check` PASS — **283 JS, 280 runner, 33 orchestrator tests**; **49 focused DAG tests**. Strict types, generated contracts/bindings, secret scan, diff check and actual pre-commit pass. T1.09 remains partial and PR13 stays draft.
+
+Additional integration limit: the job projection does not expose already accumulated frame/token/spend counters to initialize a fresh local Budget after process restart. Completed-stage resume avoids charging those stages twice, but that alone does not prove whole-job caps across restarts. Host/recovery wiring must seed or reconcile actual counters before any paid run; this remains UNTESTED. No paid provider was called.
