@@ -1,0 +1,64 @@
+{
+  "remarks": [
+    {
+      "remarkId": "r1",
+      "turnIds": [
+        "t1"
+      ],
+      "aboutSubject": "yes",
+      "kind": "instruction",
+      "aboutHint": "",
+      "atMs": 0,
+      "coachWords": ""
+    },
+    {
+      "remarkId": "r2",
+      "turnIds": [
+        "t2"
+      ],
+      "aboutSubject": "unclear",
+      "kind": "instruction",
+      "aboutHint": "",
+      "atMs": 0,
+      "coachWords": ""
+    },
+    {
+      "remarkId": "r3",
+      "turnIds": [
+        "t3"
+      ],
+      "aboutSubject": "general",
+      "kind": "instruction",
+      "aboutHint": "",
+      "atMs": 0,
+      "coachWords": ""
+    }
+  ],
+  "fanOut": [
+    {
+      "remarkId": "r1",
+      "stages": [
+        "moment",
+        "subject",
+        "track",
+        "place",
+        "check"
+      ]
+    },
+    {
+      "remarkId": "r2",
+      "stages": [
+        "moment",
+        "subject",
+        "track",
+        "place",
+        "check"
+      ]
+    }
+  ],
+  "drafts": {
+    "focus": [],
+    "practice": [],
+    "note": null
+  }
+}

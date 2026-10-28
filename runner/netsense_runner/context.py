@@ -1,4 +1,4 @@
-"""Stage context protocols; concrete HTTP clients are deliberately a later lane."""
+"""Stage context capabilities; workers return outputs and the DAG owns persistence."""
 
 from __future__ import annotations
 
@@ -18,11 +18,9 @@ class WorkerStorage(Protocol):
 
 
 class WorkerApi(Protocol):
-    """Minimal documented worker API; T1.10 owns its exact HTTP wire format."""
+    """Liveness capability only; workers return outputs, DAG owns persistence."""
 
-    def persist_stage_output(self, stage_run_id: str, output_ref: str) -> None: ...
-
-    def report_stage_usage(self, stage_run_id: str, cost_usd: float) -> None: ...
+    def heartbeat(self) -> None: ...
 
 
 class StructuredLogger(Protocol):
