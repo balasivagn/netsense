@@ -1,0 +1,13 @@
+{
+  "ops": [
+    {
+      "op": "put",
+      "key": "sessions/session-001/renders/final/full.mp4",
+      "contentType": "video/mp4"
+    },
+    {
+      "op": "get",
+      "key": "sessions/session-001/source/upload-001"
+    }
+  ]
+}
