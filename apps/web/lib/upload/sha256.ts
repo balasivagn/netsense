@@ -100,12 +100,15 @@ export async function sha256Blob(
   options: { chunkSize?: number; signal?: AbortSignal; onProgress?: (hashedBytes: number) => void } = {},
 ): Promise<string> {
   const chunkSize = options.chunkSize ?? 1024 * 1024;
-  if (!Number.isSafeInteger(chunkSize) || chunkSize < 1) throw Error("INVALID_CHUNK_SIZE");
+  if (!Number.isSafeInteger(chunkSize) || chunkSize < 1 || chunkSize > 8 * 1024 ** 2) throw Error("INVALID_CHUNK_SIZE");
+  if (!blob || !Number.isSafeInteger(blob.size) || blob.size < 0 || typeof blob.slice !== "function") throw Error("INVALID_BLOB");
+  if (options.signal?.aborted) throw new DOMException("Hash cancelled", "AbortError");
   const hash = new IncrementalSha256();
   for (let start = 0; start < blob.size; start += chunkSize) {
     if (options.signal?.aborted) throw new DOMException("Hash cancelled", "AbortError");
     const bytes = new Uint8Array(await blob.slice(start, Math.min(blob.size, start + chunkSize)).arrayBuffer());
     if (options.signal?.aborted) throw new DOMException("Hash cancelled", "AbortError");
+    if (bytes.byteLength !== Math.min(chunkSize, blob.size - start)) throw Error("INVALID_BLOB");
     hash.update(bytes);
     options.onProgress?.(Math.min(blob.size, start + bytes.byteLength));
   }

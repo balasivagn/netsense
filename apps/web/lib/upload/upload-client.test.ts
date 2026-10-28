@@ -21,7 +21,7 @@ function fakeTransport(bytes: Uint8Array, resumeFrom: number[] = []): UploadTran
     async initialize() { result.starts++; return { uploadId: "upload-1", partSize: 4, partCount: Math.ceil(bytes.length / 4), resumeFrom }; },
     async signParts(_: string, numbers: number[]) { return numbers.map((partNumber) => ({ partNumber, url: "https://storage.invalid/part", expiresAt: Date.now() + 60_000 })); },
     async put(_: string, part: Blob) { result.puts.push(part.size); return { etag: `etag-${result.puts.length}`, bytes: part.size }; },
-    async confirm(_: string, input: { partNumber: number; etag: string; bytes: number }) { result.confirms.push(input.partNumber); return { bytesConfirmed: input.bytes }; },
+    async confirm(_: string, input: { partNumber: number; etag: string; bytes: number }) { result.confirms.push(input.partNumber); return { bytesConfirmed: [...new Set([...resumeFrom, ...result.confirms])].reduce((total, n) => total + Math.min(4, bytes.length - (n - 1) * 4), 0) }; },
     async complete() { return { jobId: null }; },
     async abort() { result.aborts++; },
   });
@@ -137,6 +137,7 @@ describe("MultipartUploadController", () => {
     await pending;
     expect(client.snapshot.phase).toBe("cancelled");
     expect(transport.aborts).toBe(1);
+    expect(transport.confirms).toEqual([]);
     expect(recovery.read("coach", "session")).toBeNull();
   });
   test("rejects a different re-picked file before a part PUT, and accepts the same hash after reload", async () => {
