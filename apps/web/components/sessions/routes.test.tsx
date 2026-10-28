@@ -72,7 +72,7 @@ function deferred() {
   });
   return { resolve, promise };
 }
-async function harness() {
+async function harness(captureMode: "camera" | "camera_roll" = "camera_roll") {
   const h = await setup(false);
   await h.t.run((ctx) => ctx.db.delete(h.uploadId));
   state.id = h.sessionId;
@@ -105,7 +105,7 @@ async function harness() {
         sessionId: h.sessionId,
       });
       expect(session.consentConfirmedAt).toBeTypeOf("number");
-      expect(session.captureMode).toBe("camera_roll");
+      expect(session.captureMode).toBe(captureMode);
       const u = await h.t.mutation(internal.uploads.reserve, {
         sha256: input.sha256,
         mimeType: input.mimeType,
@@ -170,7 +170,7 @@ async function harness() {
   ) as unknown as File;
   return { ...h, file, sync, gate, transport };
 }
-async function pickFile(file: File) {
+async function pickFile(file: File, picker = "Pick clip") {
   const checkbox = screen.getByRole("checkbox");
   expect(
     (screen.getByRole("button", { name: "Pick clip" }) as HTMLButtonElement)
@@ -183,7 +183,7 @@ async function pickFile(file: File) {
         .disabled,
     ).toBe(false),
   );
-  fireEvent.change(screen.getByLabelText("Pick clip", { selector: "input" }), {
+  fireEvent.change(screen.getByLabelText(picker, { selector: "input" }), {
     target: { files: [file] },
   });
 }
@@ -445,4 +445,22 @@ test("coach/login scope change clears source and consent and aborts old controll
     (await h.coach.query(api.coachSessions.detail, { sessionId: h.sessionId }))
       .upload?.bytesConfirmed,
   ).toBe(0);
+});
+
+
+test("camera upload resumes from camera-roll reselect after reload without changing origin", async () => {
+  const h = await harness("camera");
+  const view = render(<SessionLayout><RecordPage /></SessionLayout>);
+  await pickFile(h.file, "Open camera");
+  await waitFor(() => expect(h.transport.put).toHaveBeenCalledOnce());
+  await h.sync();
+  view.unmount();
+  await act(async () => { await Promise.resolve(); });
+  state.push.mockClear();
+  render(<SessionLayout><RecordPage /></SessionLayout>);
+  await pickFile(h.file);
+  await waitFor(() => expect(h.transport.initialize).toHaveBeenCalledTimes(2));
+  expect((await h.coach.query(api.sessions.get, { sessionId: h.sessionId })).captureMode).toBe("camera");
+  await act(async () => { h.gate.resolve(); await h.gate.promise; });
+  await waitFor(async () => expect((await h.coach.query(api.coachSessions.detail, { sessionId: h.sessionId })).upload?.complete).toBe(true));
 });

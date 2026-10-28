@@ -129,3 +129,15 @@ Final validation:
 The main-target PR inherits the reviewed runtime ancestry; review this lane's
 incremental diff against `3260f6c05e65c0048e4d71881aaaf80eede3de6a`.
 No browser E2E/live Clerk/Convex or paid/vendor validation is claimed.
+
+## Parent review
+
+A new route-composition regression reproduced camera-origin uploads failing on
+camera-roll reselection after reload. RecordSession now preserves the reserved
+source's original capture mode while the existing SHA-256 check still verifies
+the chosen file. New uploads continue to persist the actual picker mode. The
+regression failed before the correction and passes afterward.
+
+Parent `pnpm check`: PASS — **447 JS / 395 runner / 62 orchestrator tests**.
+Production web build, secret scan and diff check PASS; real staged commit hook
+runs on the parent correction. Browser/live Clerk/Convex E2E remains UNTESTED.

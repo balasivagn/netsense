@@ -48,7 +48,12 @@ export function RecordSession() {
           await confirm({ sessionId: detail.id });
         }}
         onFileSelected={async (file, mode) => {
-          if (await flow.select(file, mode)) {
+          // Reselecting a reserved source does not change how it was captured.
+          // A camera recording is normally resumed through the camera-roll picker.
+          const captureMode = detail.upload &&
+            (detail.captureMode === "camera" || detail.captureMode === "camera_roll")
+            ? detail.captureMode : mode;
+          if (await flow.select(file, captureMode)) {
             if (!active.current) return;
             void flow.retry();
             router.push(`/sessions/${detail.id}/subject`);
