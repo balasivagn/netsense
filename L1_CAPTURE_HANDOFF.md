@@ -42,3 +42,14 @@ pending, scope reset and unmount late completions, `CONSENT_REQUIRED`, both
 picker attributes, synthetic dispatch after confirmation, repeat selection,
 picker cancellation and recoverable selection failure. They do not claim real
 camera, login, controller integration or E2E coverage.
+
+## Parent review
+
+Scope changes now remount the controls synchronously, so consent cannot carry
+across a coach/session change before an effect runs. Both callbacks catch
+synchronous throws as well as rejected promises and remain safely retryable.
+Two regression tests cover these synchronous failure paths.
+
+Validation: `pnpm check` PASS (410 JS, 383 runner, 33 orchestrator tests), including
+11 capture component tests; production web build, secret scan and diff check PASS.
+Route/controller integration and browser E2E remain UNTESTED.

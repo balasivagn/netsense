@@ -169,3 +169,29 @@ describe("Screen06CaptureControls", () => {
     expect((screen.getByRole("button", { name: "Pick clip" }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
+
+it("recovers from synchronous consent callback errors without exposing details", async () => {
+  const callback = vi.fn(() => { throw Error("private callback detail"); });
+  const { rerender } = renderControls({ onConfirmConsent: callback });
+  fireEvent.click(consentCheckbox());
+  await act(async () => undefined);
+  expect((consentCheckbox() as HTMLInputElement).checked).toBe(false);
+  expect(screen.getByRole("alert").textContent).toBe("We could not confirm this. Please try again.");
+  rerender(<Screen06CaptureControls scopeKey="coach-a/session-a" onConfirmConsent={async () => undefined} onFileSelected={() => undefined} />);
+  await confirmConsent();
+  expect(cameraInput().disabled).toBe(false);
+});
+
+it("recovers from a synchronous file callback error and permits selecting again", async () => {
+  const callback = vi.fn(() => { throw Error("private callback detail"); });
+  renderControls({ onFileSelected: callback });
+  await confirmConsent();
+  const clip = new File(["synthetic"], "synthetic.mp4", { type: "video/mp4" });
+  dispatchFile(cameraRollInput(), clip);
+  await act(async () => undefined);
+  expect(screen.getByRole("alert").textContent).toBe("We could not use that clip. Please try again.");
+  expect(cameraRollInput().disabled).toBe(false);
+  dispatchFile(cameraRollInput(), clip);
+  await act(async () => undefined);
+  expect(callback).toHaveBeenCalledTimes(2);
+});

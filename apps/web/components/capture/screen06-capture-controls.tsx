@@ -26,8 +26,12 @@ const fileFailureCopy = "We could not use that clip. Please try again.";
 const consentRequiredCopy = "Please confirm before uploading.";
 
 // Screen 06. The route owns sessions.confirmConsent and the upload controller.
-export function Screen06CaptureControls({
-  scopeKey,
+export function Screen06CaptureControls(props: Screen06CaptureControlsProps) {
+  // A new coach/session gets fresh state in the same render, before effects run.
+  return <ScopedCaptureControls key={props.scopeKey} {...props} />;
+}
+
+function ScopedCaptureControls({
   onConfirmConsent,
   onFileSelected,
   uploadError,
@@ -36,7 +40,6 @@ export function Screen06CaptureControls({
   const cameraRollInput = useRef<HTMLInputElement>(null);
   const live = useRef(true);
   const operation = useRef(0);
-  const previousScopeKey = useRef(scopeKey);
   const [consentState, setConsentState] = useState<ConsentState>("idle");
   const [fileState, setFileState] = useState<FileState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -61,12 +64,6 @@ export function Screen06CaptureControls({
   }, []);
 
   useEffect(() => {
-    if (previousScopeKey.current === scopeKey) return;
-    previousScopeKey.current = scopeKey;
-    resetConsent();
-  }, [scopeKey]);
-
-  useEffect(() => {
     if (uploadError === "CONSENT_REQUIRED") resetConsent(consentRequiredCopy);
   }, [uploadError]);
 
@@ -77,17 +74,17 @@ export function Screen06CaptureControls({
     const currentOperation = ++operation.current;
     setConsentState("confirming");
     setError(null);
-    void onConfirmConsent().then(
-      () => {
+    void (async () => {
+      try {
+        await onConfirmConsent();
         if (!live.current || operation.current !== currentOperation) return;
         setConsentState("confirmed");
-      },
-      () => {
+      } catch {
         if (!live.current || operation.current !== currentOperation) return;
         setConsentState("idle");
         setError(consentFailureCopy);
-      },
-    );
+      }
+    })();
   };
 
   const handleConsentChange = (checked: boolean) => {
@@ -107,17 +104,17 @@ export function Screen06CaptureControls({
     const currentOperation = ++operation.current;
     setFileState("selecting");
     setError(null);
-    Promise.resolve(onFileSelected(file, captureMode)).then(
-      () => {
+    void (async () => {
+      try {
+        await onFileSelected(file, captureMode);
         if (!live.current || operation.current !== currentOperation) return;
         setFileState("idle");
-      },
-      () => {
+      } catch {
         if (!live.current || operation.current !== currentOperation) return;
         setFileState("idle");
         setError(fileFailureCopy);
-      },
-    );
+      }
+    })();
   };
 
   return (
