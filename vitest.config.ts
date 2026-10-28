@@ -6,6 +6,7 @@ export default defineConfig({
       "packages/**/*.test.ts",
       "scripts/**/*.test.ts",
       "apps/web/**/*.test.ts",
+      "apps/web/**/*.test.tsx",
     ],
     environment: "edge-runtime",
     server: { deps: { inline: ["convex-test"] } },
