@@ -530,3 +530,19 @@ test("aborting while reading cancels reader and removes caller listener", async 
   expect(cancelled).toHaveBeenCalledOnce();
   expect(remove).toHaveBeenCalledWith("abort", add.mock.calls[0][1]);
 });
+
+test("a transport deadline retries the part while a current upload still owns it", async () => {
+  const { transport } = setup(4);
+  let calls = 0;
+  transport.put = vi.fn(async (_, part) => {
+    if (++calls === 1) throw new DOMException("Upload interrupted", "AbortError");
+    return { etag: "etag", bytes: part.size };
+  });
+  const client = new MultipartUploadController({
+    coachId: "c", sessionId: "s", file: file(4), transport,
+    recovery: browserRecoveryStore(null), retryDelaysMs: [0],
+  });
+  expect(await client.start()).toMatchObject({ phase: "ready_to_complete", confirmedBytes: 4 });
+  expect(transport.signParts).toHaveBeenCalledTimes(2);
+  expect(transport.confirm).toHaveBeenCalledTimes(1);
+});

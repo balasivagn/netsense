@@ -81,8 +81,6 @@ export type UploadEvent =
   | { type: "hash_progress"; hashedBytes: number; bytesTotal: number }
   | { type: "complete"; jobId: string | null };
 
-const isAbort = (error: unknown) =>
-  error instanceof DOMException && error.name === "AbortError";
 const safeInteger = (value: unknown) =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 const uniqueParts = (value: unknown, count: number): number[] | null =>
@@ -494,8 +492,9 @@ export class MultipartUploadController {
         });
         return;
       } catch (error) {
+        // Pause/cancel/dispose invalidate the generation. An AbortError while
+        // this run is current is a transport deadline and may use its retry budget.
         this.current(run);
-        if (isAbort(error)) throw error;
         if (attempt >= this.retries.length) throw error;
         await this.wait(this.retries[attempt], run);
       }

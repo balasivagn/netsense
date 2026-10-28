@@ -1,7 +1,7 @@
 # L4 browser upload client handoff — T1.06 partial
 
 Corrective task on PR19, based exactly on `6fb2909abfc343f00d19b7ae50ec4a872096e8da`.
-Parent integration remains `c2cea96518bd237db98fa984771c83d7d71d8212` and excludes PR19.
+Parent review builds on integration `c2cea96518bd237db98fa984771c83d7d71d8212`.
 No server handler, Convex, contract, SPEC, runner or orchestrator changes.
 
 ## Exports and UI integration
@@ -108,3 +108,15 @@ credentials or vendor calls were used.
 - `git diff HEAD --check`: PASS.
 - `git hook run pre-commit`: PASS — actual staged gitleaks hook; the commit
   also runs that hook without a bypass.
+
+## Parent acceptance
+
+The parent verified the six original reproductions and real-backend coverage,
+then added a regression for a transport deadline during a part PUT. Such a
+timeout now uses the bounded retry schedule while the current run owns the
+upload; pause/cancel/dispose still invalidate the run and cannot retry. The new
+test failed before the fix and passes afterward.
+
+Final parent `pnpm check`: **399 JS, 383 runner, 33 orchestrator tests passed**,
+including **82 upload tests**, lint/typechecks, contract drift and offline Convex
+bindings. Full browser upload-to-student E2E remains pending.
