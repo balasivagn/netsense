@@ -111,10 +111,11 @@ pnpm runs:show <jobId> --cost   # one job
 Compare against the Meta Billing page and the Modal usage page weekly. Target from the spike: ≤ ~$1.50 per session (S-6). Update `config/prices.json` if prices change.
 
 ### 3.3 Pre-demo checklist
+- [ ] **Wake the VM** (free plan, I1): about 10 minutes before the demo, open the public URL (`APP_BASE_URL`); wait until `curl -s <public-url>/api/health` returns ok and shows `orchestrator.lastPollAt` within the last minute. Keep it awake by reloading if the demo starts more than 30 minutes later.
 - [ ] VM awake; `/api/health` ok; orchestrator polled in the last minute.
 - [ ] `pnpm runs:sandboxes --open` empty.
 - [ ] `pnpm cost:today` well under `DAILY_SPEND_LIMIT_USD`.
-- [ ] Footage: adults who agreed to be filmed; off-app agreement notes exist (D2); no minors (D3).
+- [ ] Footage: adults who agreed to be filmed; no minors (D3); the consent checkbox was ticked for every session shown (`consentConfirmedAt` set; C-C, D2).
 - [ ] One fully processed real session ready; demo fallback exported (`pnpm demo:export`) and badge checked.
 - [ ] Student link created; code noted privately; second device ready.
 - [ ] No model names on coach/student screens; footer line visible on 25.
@@ -140,6 +141,7 @@ Compare against the Meta Billing page and the Modal usage page weekly. Target fr
 | Wed 28 Oct 2026 | Build spec v1 written (SPEC, TASKS, WORKPLAN, DECISIONS, SETUP, RUNBOOK) | — |
 | Wed 28 Oct 2026, 3 PM | Bala: clips have several people, focus on one | Spec v1.1: one selected subject (F1, scope reduction), spike S-2…S-4 rewritten for the selected person, "Ready to test now" chunk added. A short-lived "no voice" schedule change (commit 9e65852) was reverted the same afternoon: missing commentary in early clips is a test-data gap, not a product change. |
 | Wed 28 Oct 2026, 3:15 PM | Bala: Codex pushes its own branch and opens PRs to `main` | AGENTS.md rule 13, WORKPLAN, SETUP §9 updated; Bala reviews and merges |
+| Wed 28 Oct 2026, 5 PM | Bala's decisions (relayed via Chief of Staff): C-C/D2/D3 minimal consent checkbox; S1 R2; I1 free plan; D8 blocked until Bala confirms | SPEC, TASKS (new T1.37), WORKPLAN (L4), DECISIONS, SETUP steps 1/5/6, RUNBOOK §3.3, `.env.example`, README. Still awaiting Bala: G1, C-P, M1, F4 (07a design), MW. |
 | | | |
 
 ### Foundation log / refinements — 28 Oct 2026

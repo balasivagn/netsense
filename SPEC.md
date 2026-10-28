@@ -4,7 +4,7 @@ Written Wed 28 Oct 2026 (SGT, UTC+8) for the coding agent (Codex) and for Bala S
 
 > **Capability caveat.** Every Meta model, Modal, Convex, Clerk, R2 and instabox capability below comes from vendor docs and is **UNTESTED** for NetSense until the M0 feasibility spike (TASKS.md `T0.*`). Every timeout, cap and cost figure is an unmeasured default that you tune after the spike. If a vendor API turns out to differ from what is written here, follow the vendor's current docs, keep the contract in this spec, and log the change in RUNBOOK.md "Log / refinements".
 
-> **Revision v1.1 (Wed 28 Oct 2026, 3:05 PM SGT, Bala's input).** (1) **One person in focus:** tracking follows a single subject the coach selects by tapping them on a frame (screen 07a, new). SAM 3.1 tracks that one person; everyone else is ignored. Batter or bowler is a role label on that subject, not two tracks. This is a scope reduction (DECISIONS.md `F1`). (2) The aim now is "ready to test": TASKS.md starts with a chunk that needs no paid keys.
+> **Revision v1.1 (Wed 28 Oct 2026, 3:05 PM SGT, Bala's input).** (1) **One person in focus:** tracking follows a single subject the coach selects by tapping them on a frame (screen 07a, new). SAM 3.1 tracks that one person; everyone else is ignored. Batter or bowler is a role label on that subject, not two tracks. This is a scope reduction (DECISIONS.md `F1`). (2) The aim now is "ready to test": TASKS.md starts with a chunk that needs no paid keys. (3) **Decisions of Wed 28 Oct, 5 PM SGT** (decided by Bala 28 Oct (relayed via Chief of Staff)): a minimal consent checkbox on the upload screen (C-C, D2, D3; T1.37), Cloudflare R2 for video (S1), instabox free plan (I1).
 
 > **Pending decisions** are marked `DECISION PENDING (Bala)` with a default. Build the default and keep it configurable. The full list is in DECISIONS.md.
 
@@ -34,7 +34,7 @@ Non-goals (not built, not claimed):
 - Only one person is tracked per session: the subject the coach selects (F1). No multi-person tracking, no automatic batter/bowler pairing.
 - No bat, ball, bat-speed, angle, distance or biomechanics tracking or analysis. No technique scores. NetSense is not an AI coach and not a video analyser.
 - No payments, attendance, marketing, academy admin, multi-student dashboard, guardian accounts.
-- No in-app consent step in the hackathon build (C-C, `DECISION PENDING (Bala)`, see §3).
+- Minimal consent checkbox; no full consent flow (C-C, decided by Bala 28 Oct (relayed via Chief of Staff), see §3). The full consent flow for juniors is a later item.
 - No Meta glasses integration. Glasses are mentioned only as a possible future capture option.
 - Daytona is not used.
 
@@ -55,7 +55,7 @@ Content rules (apply to UI copy, README, write-up, demo video, commit messages, 
 | Student | Private link plus 6-digit code, no account (screens 24–27) | View one approved lesson snapshot until it expires or is turned off |
 | Dev (Bala) | Clerk user with `publicMetadata.role = "dev"` and `FEATURE_DEV_RUNS_VIEW` on | Screen 28 (extra, not M1) |
 
-People filmed: in the hackathon build every person in the footage is an adult who agreed to be filmed, recorded off-app (D2). No minors (D3). `DECISION PENDING (Bala)`: C-C "no in-app consent step" is reported by the Product Designer as Bala's decision and awaits his confirmation. Default: no consent step; screen 22 shows "Hackathon build: demo uses adults who agreed to be filmed. A consent step for juniors comes in a later version." The schema keeps `consents` and `sessions.consentCheck` as **later** (not created in M1).
+People filmed: in the hackathon build every person in the footage is an adult who agreed to be filmed. No minors (D3). **Minimal consent checkbox; no full consent flow** (C-C, D2, D3, decided by Bala 28 Oct (relayed via Chief of Staff)): screen 06 has one required checkbox, "Everyone filmed in this clip is an adult and agreed to be filmed." The upload cannot start until it is ticked; ticking it calls `sessions.confirmConsent`, which stores `sessions.consentConfirmedAt` and `sessions.consentConfirmedBy` (the confirming user's Clerk ID). `POST /api/uploads` refuses a session without `consentConfirmedAt` (`CONSENT_REQUIRED`). Screen 22 shows "Hackathon build: everyone filmed is an adult who agreed to be filmed. A full consent flow for juniors comes in a later version." The full consent flow (`consents` table, per-person records, juniors) stays **later** (not created in M1).
 
 ## 4. Screens and user flows
 
@@ -79,7 +79,7 @@ Visual rules for every screen:
 | 02 | Sessions · empty (`02-sessions-empty.png`) | `/sessions` (no rows) | First run. Three "before you start" points: about 10 min, keep your player in frame; only film people who agreed to be filmed; talk about what you see as you film. (Wireframe text differs: it predates the one-person decision.) | + New session | none |
 | 03 | Sessions list (`03-sessions-list.png`) | `/sessions` | One row per session with live status from the latest `jobs` row. Filters All / Needs you / Shared. Row tap routes by state: processing → 12, review ready → 17, error → 13–16, shared → 23. | filter, open row, + New session | "! Fix" badge for failed sessions; "Still frames only" label for stills sessions; "Upload failed" after 3 upload attempts |
 | 04 | New session (`04-new-session.png`, **changed in v1.1**) | `/sessions/new` | Pick **who this lesson is for** (existing students or + Add a student by label) and what they are doing: **Batting / Bowling / Other**. Writes `sessions.studentId`, `sessions.subjectRole`. The wireframe's separate bowler picker is dropped (one person in focus, F1). No consent badges. | select, + Add a student, pick role, Continue | Continue disabled until a student and role are picked |
-| 06 | How to record (`06-how-to-record.png`) | `/sessions/[id]/record` | Main: Record with phone camera (`<input type="file" accept="video/*" capture="environment">`); Upload from camera roll (`<input type="file" accept="video/*">`). In-page recording is an **extra** (X1), hidden in M1. Writes `sessions.captureMode`. | Open camera, Pick clip | Hide in-page option when MediaRecorder is missing (X1 only) |
+| 06 | How to record (`06-how-to-record.png`) | `/sessions/[id]/record` | Main: Record with phone camera (`<input type="file" accept="video/*" capture="environment">`); Upload from camera roll (`<input type="file" accept="video/*">`). In-page recording is an **extra** (X1), hidden in M1. Writes `sessions.captureMode`. **Consent checkbox (required, C-C):** one checkbox above the buttons, unticked by default: "Everyone filmed in this clip is an adult and agreed to be filmed." Ticking it calls `sessions.confirmConsent` (stores `consentConfirmedAt`, `consentConfirmedBy`). Not a full consent flow. | Tick consent, Open camera, Pick clip | Open camera and Pick clip are disabled until the box is ticked; if `/api/uploads` still returns `CONSENT_REQUIRED` (e.g. stale tab), the box is shown unticked again with "Please confirm before uploading." Hide in-page option when MediaRecorder is missing (X1 only) |
 | 07a | **Pick who to follow** (new in v1.1, no wireframe yet; design gap flagged to Bala) | `/sessions/[id]/subject` (shown alongside 07 while the upload runs) | The browser decodes the chosen file locally (`<video>` + canvas, no network) and shows a frame scrubber. The coach scrubs to a frame where their player is clear and **taps the person**. Writes `sessions.subject = {frameMs, point: {x, y} (0–1), role, selectedBy: "coach", selectedAt}` via `sessions.setSubject`. Copy: "Tap the player to follow. Other people in the video are ignored." | scrub, tap, Retake tap, Confirm | No frame decodes in the browser (some HEVC on Android) → "Pick after upload": the step reappears on 12 using the server key frames once transcode finishes. The pipeline does not start until both the upload is complete and a subject is set. |
 | 07 | Upload progress (`07-upload-progress.png`) | `/sessions/[id]/upload` | Resumable multipart upload; progress counts only parts the server confirmed (`uploads.bytesConfirmed`, `partsConfirmed`). | Pause, Cancel (asks first) | Dropped connection or app switch → 08 |
 | 08 | Upload paused / failed (`08-upload-failed.png`) | same route, state | "Nothing is lost": confirmed parts are kept; retry with backoff. | Retry now, Choose the clip again (matched by SHA-256) | After 3 attempts Sessions shows "Upload failed"; checksum mismatch on re-pick: "This isn't the same clip" |
@@ -106,7 +106,7 @@ Typed remarks (13/14): the coach types a remark and picks the time on the scrubb
 | 19 | Review marks (`19-review-marks.png`) | `/sessions/[id]/review` | One card per mark: "COACH SAID · mm:ss" quote, mark type and role, AI-placed tag, time range, **Why here:** line (`annotations.why`), status. Tabs: Needs you / Approved / AI suggestions. | Approve, Edit (mark type, neutral label choice, or transcription fix marked "corrected by coach"), Move (→ 20), Delete (undo), Dismiss suggestion, Edit notes (→ 21), Continue to share (→ 22), **Change who to follow** (back to 07a on any frame; enqueues a `subject_retrack` job that re-runs stages 4–8 for every remark and resets AI marks to "Needs you"; coach-placed marks are kept). **Re-place this mark is an extra (X4), hidden in M1.** | No bulk approve; unapproved items are left out of the share |
 | 20 | Move mark (`20-move-mark.png`) | `/sessions/[id]/review/[annotationId]/move` | Retime (dashed = AI range kept in `aiPlacement`, solid = coach range) or set No one (note only); change mark type. Coach's words never change. There is no reassign to another person (one person in focus, F1; the wireframe's Batter/Bowler switch is dropped). | ±0.5 s, drag, note only, pick mark type, Save and approve | If the selected person has no track at that time, offer the 16 options. Only the affected segment is re-rendered at final render |
 | 21 | Edit notes + focus card (`21-edit-notes.png`) | `/sessions/[id]/review/notes` | Coach's note (free text, solid), focus points (1–2), practice list (cut 6 removes it). AI drafts dashed with Why lines. | edit, Approve / Edit / Dismiss each AI item, + Add your own drill, Done | A third focus point is blocked |
-| 22 | Share privately (`22-share-privately.png`) | `/sessions/[id]/share` | Recipient (the student's label and masked contact if on file), what is shared and what is left out (pending marks, unapproved AI suggestions, remarks not about the selected person by default), link stops after 30 days, download off, 6-digit code required. Carries: "Hackathon build: demo uses adults who agreed to be filmed. A consent step for juniors comes in a later version." | Create private link | Left-out items are never in the snapshot |
+| 22 | Share privately (`22-share-privately.png`) | `/sessions/[id]/share` | Recipient (the student's label and masked contact if on file), what is shared and what is left out (pending marks, unapproved AI suggestions, remarks not about the selected person by default), link stops after 30 days, download off, 6-digit code required. Carries: "Hackathon build: everyone filmed is an adult who agreed to be filmed. A full consent flow for juniors comes in a later version." | Create private link | Left-out items are never in the snapshot |
 | 23 | Private link ready (`23-link-ready.png`) | `/sessions/[id]/share/ready` | Link and code shown once (code is never stored in clear), sent by the coach from their own phone. Shows Opened (`openedAt`) and stop date. Next-session focus card for the coach (§4.5). | Copy link, Copy code, Share… (Web Share API), Turn off link, Back to Sessions | Turn off sets `revokedAt`; student then sees 27 |
 
 ### 4.4 Student (no sign-in)
@@ -159,7 +159,7 @@ flowchart LR
     S2["Stage 2 orchestrator agent"]
     PR["Per-remark sub-agent ×N (capped)<br/>3 moment · 4 subject · 5 track · 6 place · 7 check"]
   end
-  ST[("Video storage<br/>R2 (default, DECISION PENDING S1)<br/>or VM disk")]
+  ST[("Video storage<br/>Cloudflare R2, private<br/>(S1 decided; local = dev only)")]
   subgraph Meta["Meta Model API · Standard"]
     VT["Muse Voice Transcribe"]
     MS["Muse Spark 1.3"]
@@ -201,7 +201,7 @@ Five-line summary:
 
 Two runtime switches keep the plan alive if a vendor fails:
 - `SANDBOX_DRIVER = modal | local` — `local` runs the same runner as a subprocess on the VM (R9 shape) if Modal credits do not arrive or Modal fails the spike. Same contracts, no sandbox lifecycle.
-- `STORAGE_DRIVER = r2 | local` — `local` keeps video on the VM `/data` disk (cut 11).
+- `STORAGE_DRIVER = r2 | local` — default `r2` (S1, decided by Bala 28 Oct (relayed via Chief of Staff)); `local` is a dev/test fallback only (laptop, CI, E2E), never prod.
 
 ---
 
@@ -589,7 +589,7 @@ Document limit is 1 MiB: tracks, masks, key frames and renders live in storage; 
 |---|---|---|
 | `coaches` | `clerkUserId`, `displayName`, `createdAt` | `by_clerkUserId` |
 | `students` | `coachId`, `label` (first name or nickname), `contactMasked?` (e.g. `+65 •••• 21`, optional), `createdAt` | `by_coachId` |
-| `sessions` | `coachId`, `studentId: v.id("students")` (who the lesson is for), `subjectRole: "batter"\|"bowler"\|"other"`, `subject?: Subject` (§7 common types; tapped on 07a), `subjectStatus: "needed"\|"set"\|"anchored"\|"anchor_failed"`, `subjectAnchor?: {box, frameMs, referenceCropKey}`, `captureMode: "camera"\|"camera_roll"\|"in_page"`, `renderMode: "video"\|"stills"`, `isDemoFallback: boolean` (§22.4), `status: "draft"\|"uploading"\|"processing"\|"needs_you"\|"review_ready"\|"shared"\|"failed"`, `latestJobId?`, `durationMs?`, `createdAt` | `by_coachId_createdAt` |
+| `sessions` | `coachId`, `studentId: v.id("students")` (who the lesson is for), `subjectRole: "batter"\|"bowler"\|"other"`, `subject?: Subject` (§7 common types; tapped on 07a), `subjectStatus: "needed"\|"set"\|"anchored"\|"anchor_failed"`, `subjectAnchor?: {box, frameMs, referenceCropKey}`, `captureMode: "camera"\|"camera_roll"\|"in_page"`, `renderMode: "video"\|"stills"`, `consentConfirmedAt?: number` (ms; set by the screen 06 checkbox, C-C), `consentConfirmedBy?: string` (Clerk user ID of the confirming coach), `isDemoFallback: boolean` (§22.4), `status: "draft"\|"uploading"\|"processing"\|"needs_you"\|"review_ready"\|"shared"\|"failed"`, `latestJobId?`, `durationMs?`, `createdAt` | `by_coachId_createdAt` |
 | `uploads` | `sessionId`, `coachId`, `storageKey`, `driver: "r2"\|"local"`, `multipartUploadId?`, `mimeType`, `bytesTotal`, `bytesConfirmed`, `partSize`, `partsConfirmed: number[]`, `sha256`, `status: "in_progress"\|"paused"\|"complete"\|"failed"\|"aborted"`, `attempts`, `createdAt`, `completedAt?` | `by_sessionId` |
 | `pipeline_config` | `version`, `active: boolean`, `stages: StageConfig[]` (§17), `coachStages`, `limits`, `createdAt`, `note` | `by_version`, `by_active` |
 | `jobs` | `sessionId`, `coachId`, `kind: "pipeline"\|"subject_retrack"\|"remark_retrack"\|"stage_retry"\|"finalize"`, `remarkId?`, `stage?`, `configVersion` (pinned at creation), `status: "queued"\|"running"\|"done"\|"failed"\|"waiting_for_coach"\|"cancelled"`, `coachStage`, `progress?`, `progressLabel?`, `errorCode?`, `attempt`, `maxAttempts`, `leaseOwner?`, `leaseUntil?`, `heartbeatAt?`, `sandboxId?`, `sandboxName?`, `lastStageDone?`, `samFrames`, `inputTokens`, `outputTokens`, `costUsd`, `createdAt`, `startedAt?`, `endedAt?` | `by_status_createdAt`, `by_sessionId` |
@@ -605,10 +605,11 @@ Document limit is 1 MiB: tracks, masks, key frames and renders live in storage; 
 | `lessonSnapshots` | `sessionId`, `createdAt`, `payload` (approved remarks + coach words + approved annotations + approved focus/practice/notes + render refs + track refs), `renderMode` | `by_sessionId` |
 | `shareLinks` | `sessionId`, `coachId`, `snapshotId`, `tokenHash`, `codeHash`, `createdAt`, `expiresAt`, `revokedAt?`, `openedAt?`, `failedAttempts`, `lockedUntil?` | `by_tokenHash`, `by_sessionId` |
 | `costLedger` | `day` (SGT `YYYY-MM-DD`), `jobId`, `stage`, `provider`, `units` (`samFrames`/`tokens`/`audioSeconds`/`sandboxSeconds`), `quantity`, `usd` | `by_day` |
-| `consents` | **later**, not created in M1 | |
+| `consents` | **later**, not created in M1 (full consent flow; M1 has only the `sessions.consentConfirmed*` checkbox fields) | |
 
 Key Convex functions (TypeScript, `convex/`):
 - `sessions.create` (student + `subjectRole`), `sessions.list`, `sessions.get`, `sessions.setRenderMode`, `sessions.setSubject` (owner only; validates point in 0–1 and `frameMs` ≤ duration when known; if the upload is already complete and no pipeline job exists, enqueues it; if a pipeline has run, enqueues `subject_retrack`).
+- `sessions.confirmConsent` (owner only; sets `consentConfirmedAt = now` and `consentConfirmedBy = ctx.auth` user ID; idempotent: a second call keeps the first values).
 - `students.list`, `students.add`.
 - `uploads.*` internal mutations called from the VM API (§10.2).
 - `jobs.enqueue` (internal; pins the active `pipeline_config.version`), `jobs.claim` (atomic: oldest `queued` → `running`, sets `leaseOwner`, `leaseUntil = now + JOB_LEASE_S`, `attempt += 1`), `jobs.heartbeat`, `jobs.setSandbox`, `jobs.markReleased`, `jobs.finish`, `jobs.requeueStage`, `jobs.requestFinalize`, `jobs.cancel`.
@@ -650,7 +651,7 @@ Key Convex functions (TypeScript, `convex/`):
 ### 10.2 VM HTTP API (Next.js route handlers, `apps/web/app/api/`)
 | Method · path | Auth | Body → response |
 |---|---|---|
-| `POST /api/uploads` | coach | `{sessionId, fileName, mimeType, bytesTotal, sha256}` → `{uploadId, partSize, partCount, resumeFrom: number[]}`. Starts multipart (R2) or a local temp file. Matching `sha256` for the same session resumes. |
+| `POST /api/uploads` | coach | `{sessionId, fileName, mimeType, bytesTotal, sha256}` → `{uploadId, partSize, partCount, resumeFrom: number[]}`. Starts multipart (R2) or a local temp file. Matching `sha256` for the same session resumes. Rejects with `409 CONSENT_REQUIRED` unless `sessions.consentConfirmedAt` is set (C-C). |
 | `POST /api/uploads/[uploadId]/parts` | coach | `{partNumbers: number[]}` → `{urls: [{partNumber, url, expiresAt}]}` (presigned PUT, TTL 15 min) |
 | `POST /api/uploads/[uploadId]/parts/confirm` | coach | `{partNumber, etag, bytes}` → `{bytesConfirmed}` (progress counts confirmed parts only) |
 | `POST /api/uploads/[uploadId]/complete` | coach | `{}` → `{jobId}`. Completes multipart, `HEAD` checks size = `bytesTotal`, then `jobs.enqueue(kind="pipeline")` **only if `sessions.subject` is set**; otherwise the session waits in `subjectStatus = "needed"` and `sessions.setSubject` enqueues. SHA-256 is verified by `transcode`. |
@@ -704,13 +705,13 @@ The runner itself also cleans up in its own `finally`: deletes Files API uploads
 
 `SANDBOX_DRIVER=local` runs the same command as a subprocess on the VM with the same watch, timeout, heartbeat and finally-kill path (process group kill). Used for no Modal credits, local dev, and E2E tests with `provider=fake`.
 
-instabox note: on the free plan the VM pauses after 30 minutes idle and that cannot be turned off; a paused VM stops the orchestrator and sweeper, but Modal's own `timeout` still ends the sandbox, so cost stays bounded. `DECISION PENDING (Bala)`: plan; on a paid plan run `instabox auto-suspend <machine> 0` before the demo week.
+instabox note: **free plan** (I1, decided by Bala 28 Oct (relayed via Chief of Staff)). Modal does the processing, so costs stay low; the VM pauses after 30 minutes idle and that cannot be turned off; a paused VM stops the orchestrator and sweeper, but Modal's own `timeout` still ends the sandbox, so cost stays bounded. Wake the VM before every demo (RUNBOOK §3.3).
 
 ---
 
 ## 12. Storage interface
 
-`DECISION PENDING (Bala)` S1, due **Wed 28 Oct 2026**. PROPOSAL §3d proposes a private S3-compatible bucket such as **Cloudflare R2** with expiring signed links; VM disk is cut 11. Build both adapters behind one interface; `STORAGE_DRIVER` selects. Default in `.env` for prod: whatever S1 decides; until then dev uses `local`, and the R2 adapter is built and tested against R2 once keys exist.
+S1, decided by Bala 28 Oct (relayed via Chief of Staff): **Cloudflare R2**, a private bucket with expiring signed links (PROPOSAL §3d). `STORAGE_DRIVER=r2` is the default and the only prod driver. Both adapters stay behind one interface; `local` is a dev/test fallback only (laptop, CI, E2E with `provider=fake`). The R2 adapter is tested against R2 once keys exist (SETUP step 5).
 
 ```ts
 // apps/web/lib/storage/types.ts
@@ -763,6 +764,7 @@ Error codes (`packages/contracts/schemas/ErrorCode.json`) and where the coach se
 
 | Code | Raised by | Retry? | Coach sees | Student impact |
 |---|---|---|---|---|
+| `CONSENT_REQUIRED` | `POST /api/uploads` | no | 06: checkbox shown again, "Please confirm before uploading." | none |
 | `UPLOAD_PART_FAILED` | browser | yes, backoff 2/8/30 s | 08 Upload paused | none |
 | `UPLOAD_CHECKSUM` | transcode / re-pick | no | 08 "This isn't the same clip" | none |
 | `UPLOAD_SIZE_MISMATCH` | `/complete` | no | 08 | none |
@@ -837,7 +839,7 @@ Feature flags (env, read by web and runner; each maps to a cut, §22.2):
 | `FEATURE_MARK_TYPES` | `circle,arrow,highlight,label` | 8 (`circle,label`) |
 | `FEATURE_REVIEW_MODE` | `full` | 9 (`simple`: approve/delete + retime only) |
 | `FEATURE_LINK_EXTRAS` | on | 10 (off drops Turn off UI, Opened, lockout) |
-| `STORAGE_DRIVER` | pending S1 | 11 (`local`) |
+| `STORAGE_DRIVER` | `r2` (S1 decided) | — (`local` is dev/test only; cut 11 retired by S1) |
 | `FORCE_STILLS` | off | 12 (Still frames only for all sessions) |
 | `FEATURE_DEV_RUNS_VIEW` | off | 3 (X5) |
 | `FEATURE_REPLACE_MARK` | off | 4 (X4) |
@@ -881,7 +883,7 @@ Rate limits (Spark 3,000 RPM, SAM 3,000 RPM, Voice Transcribe 256 concurrent) ar
 | Convex | `convex-test` + vitest | ownership checks; claim is atomic; `share.create` snapshots approved items only; lockout; no bulk approve mutation exists | no |
 | Web | vitest + Testing Library | coach vs AI visual states, upload resume logic | no |
 | Subject | pytest + vitest | 07a tap → `sessions.subject` (normalised point); job gating (upload complete + subject set, either order, enqueues exactly once); anchor picks the mask containing the tap; re-id maps `boxNumber` → box and 0 → `SUBJECT_NOT_FOUND`; swap guard flags a synthetic jump and a re-association; only the subject's object id is kept when the fake SAM stream contains 3 people | no |
-| E2E | Playwright, `SANDBOX_DRIVER=local`, `provider=fake`, `STORAGE_DRIVER=local` | sign in (Clerk testing token) → new session → upload synthetic clip → tap the subject on 07a (`fixtures/synthetic/`, generated by `scripts/make-synthetic-clip.sh`: ffmpeg test pattern + TTS-free sine audio, clearly synthetic) → status → review approve → share → student code → lesson | Clerk test keys only |
+| E2E | Playwright, `SANDBOX_DRIVER=local`, `provider=fake`, `STORAGE_DRIVER=local` | sign in (Clerk testing token) → new session → tick the consent checkbox on 06 → upload synthetic clip → tap the subject on 07a (`fixtures/synthetic/`, generated by `scripts/make-synthetic-clip.sh`: ffmpeg test pattern + TTS-free sine audio, clearly synthetic) → status → review approve → share → student code → lesson | Clerk test keys only |
 | Live smoke | `pnpm smoke:live` | one real clip through the real pipeline on Modal + Meta; asserts stageRuns, sandbox released, cost under cap | **real keys + real clip (human)** |
 
 CI (`.github/workflows/ci.yml`): lint, typecheck, unit, contracts, convex-test, E2E with fake provider, gitleaks. No secrets in CI. Agents run it on their lane branch and PR (AGENTS.md rule 13).
@@ -900,7 +902,7 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, unit, contracts, convex-test, 
 | 7 | Re-place this mark (19) and screen 28 | Cut (4 and 3) | Drawn on 19; screen 28 designed | Hidden behind flags; extras X4, X5. |
 | 8 | Retry on 13/15 | Same worker in M1 | "using the registry's fallback transcriber / segmenter" | M1 retries the same worker; fallback workers return with X3. |
 | 9 | Fallback name | "Still frames only" adopted | Open question 6 | **Still frames only** (`renderMode = "stills"`, `mode = "still_frame"`). |
-| 10 | Video storage | R2 proposed, S1 open | Open question 9 | `DECISION PENDING (Bala)` S1; R2 adapter is the proposed default, local adapter is cut 11. |
+| 10 | Video storage | R2 proposed, S1 open | Open question 9 | S1 decided by Bala 28 Oct (relayed via Chief of Staff): Cloudflare R2, private, expiring links; `STORAGE_DRIVER=r2` default; `local` dev fallback only. |
 | 11 | Link model | Link + 6-digit code proposed | (a) link only or (b) link + code, open | `DECISION PENDING (Bala)` D4; default (b). |
 | 12 | Bowler remarks in a batter's lesson | Listed as open | Default: left out | Superseded by F1: remarks not about the selected person are note-only and left out by default (`otherPersonRemarksInShare: false`), pending (B1). |
 | 13 | Worker versions (`vt@1`, `place@3`, …) | — | Registry example, labelled "Example data" | Not used. Spec defines its own worker ids (§6.1). |
@@ -922,7 +924,7 @@ CI (`.github/workflows/ci.yml`): lint, typecheck, unit, contracts, convex-test, 
 | 2:15–2:40 | Student link: code, lesson, footer line | 22–25 on a second device |
 | 2:40–3:00 | Focus card + next-session focus; close | 26, 23 |
 
-Footage: adults who agreed to be filmed only (D2/D3), recorded off-app. Screen recordings at 1080p from a phone (or a narrow desktop window). If the live pipeline fails on the day, use the demo fallback (§22.4) and say so on screen.
+Footage: adults who agreed to be filmed only, no minors (D3); the consent checkbox on 06 is ticked for every clip uploaded (C-C, D2). Screen recordings at 1080p from a phone (or a narrow desktop window). If the live pipeline fails on the day, use the demo fallback (§22.4) and say so on screen.
 
 ## 22. Scope
 
@@ -946,7 +948,7 @@ Everything in §4 except 09–11 and 28 and Re-place; all 8 stages with one defa
 
 **Never cut:** coach-vs-AI distinction and coach approval; verbatim coach words; link + code; the adults-only footage rule; SAM 3.1 in the core path.
 
-Cut order (PROPOSAL): 1 Daytona out · 2 no second model API · 3 A/B + screen 28 · 4 Re-place · 5 extra fallback workers + critic agent → **applied from the start** (they define M1). 6 practice plan · 7 no ffmpeg render (live overlay only) · 8 circle + label only · 9 simpler review → **at the checkpoints Thu 29 Oct and Sat 31 Oct**. 10 simpler link (drop Turn off UI, Opened receipt, lockout) · 11 video on VM disk · 12 Still frames only → **last resorts**. Each cut is a flag in §17 so it can be applied without code surgery.
+Cut order (PROPOSAL): 1 Daytona out · 2 no second model API · 3 A/B + screen 28 · 4 Re-place · 5 extra fallback workers + critic agent → **applied from the start** (they define M1). 6 practice plan · 7 no ffmpeg render (live overlay only) · 8 circle + label only · 9 simpler review → **at the checkpoints Thu 29 Oct and Sat 31 Oct**. 10 simpler link (drop Turn off UI, Opened receipt, lockout) · ~~11 video on VM disk~~ (retired: S1 makes `local` dev-only) · 12 Still frames only → **last resorts**. Each cut is a flag in §17 so it can be applied without code surgery.
 
 ### 22.3 Extras (after M1, in reverse cut order, only if time allows)
 X1 in-page recording 09–11 (MediaRecorder, 2–5 s timeslice, chunks `{session_id, seq, bytes, sha256}` as idempotent PUT, IndexedDB backlog, final manifest; Android WebM, iOS fragmented MP4; 720p ~2.5 Mbps); X2 critic agent; X3 extra fallback workers; X4 Re-place this mark; X5 A/B candidates + screen 28; X6 Fireworks/Baseten providers; X7 Gemini provider (only if G1 = yes); X8 mask-shaped highlight.
