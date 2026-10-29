@@ -154,3 +154,8 @@ T1.01–T1.03 add a no-key scaffold, schema generation, and internal Convex foun
 - Real gitleaks 8.30.0 is downloaded from its official release with a release-checksum check into `.orca-scratch/tools` when unavailable on PATH. The pre-commit hook invokes the real staged scanner; `scripts/secret-scan.sh` separately scans all Git history and tracked/nonignored working-tree source. Install via `scripts/install-gitleaks.sh`, then `pnpm install` installs the hook through pre-commit. No hook bypass is permitted.
 - No sandbox, paid stage, upload/storage service, real media, sample UI content, or credential fallback is introduced. M1 E2E does not exist until the later lanes/T1.31. The server-keyframe/tap-gate contradiction remains unresolved; IC1 deployment and Bala's merge are pending.
 - Runner integration must also resolve subject-retrack after an initial anchor failure: per-remark moment artifacts may not exist yet. The foundation does not execute a retrack or claim those prerequisites were produced.
+
+### Runner interface review — 28 Oct 2026
+
+- T1.08 uses the documented Chat Completions `text`/`image_url` content shape; `input_text` belongs to Responses. Reference: [Meta vision input](https://dev.meta.ai/docs/cookbook/vision-input). Transport requests are unit-tested only; live Meta acceptance remains **UNTESTED**.
+- Per-call frame/box/turn-id enums are enforced on responses as well as sent in requests. Invalid budget values cannot enter the counters. Arbitrary subprocess stderr is replaced with a safe marker, and process groups are released on normal completion, failure, timeout and cancellation. These parent-review fixes have regression tests; they do not constitute sandbox/orchestrator or real vendor validation.
