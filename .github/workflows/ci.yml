@@ -20,6 +20,10 @@ jobs:
           version: '0.9.21'
       - uses: pnpm/action-setup@v4
       - run: uv python install 3.12
+      - name: Install local media tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
       - run: scripts/install-gitleaks.sh
       - run: pnpm install --frozen-lockfile
       - run: uv sync --project runner --locked
