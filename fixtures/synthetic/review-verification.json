@@ -1,0 +1,98 @@
+{
+  "track": {
+    "fps": 10,
+    "subjectOnly": true,
+    "frames": [
+      {
+        "ms": 100,
+        "box": { "x1": 10, "y1": 10, "x2": 100, "y2": 100 },
+        "conf": 1
+      },
+      {
+        "ms": 200,
+        "box": { "x1": 10, "y1": 10, "x2": 100, "y2": 100 },
+        "conf": 1
+      },
+      {
+        "ms": 300,
+        "box": { "x1": 10, "y1": 10, "x2": 100, "y2": 100 },
+        "conf": 1
+      },
+      {
+        "ms": 400,
+        "box": { "x1": 10, "y1": 10, "x2": 100, "y2": 100 },
+        "conf": 1
+      },
+      {
+        "ms": 500,
+        "box": { "x1": 10, "y1": 10, "x2": 100, "y2": 100 },
+        "conf": 1
+      },
+      {
+        "ms": 600,
+        "box": { "x1": 10, "y1": 10, "x2": 100, "y2": 100 },
+        "conf": 1
+      },
+      {
+        "ms": 700,
+        "box": { "x1": 10, "y1": 10, "x2": 100, "y2": 100 },
+        "conf": 1
+      },
+      {
+        "ms": 800,
+        "box": { "x1": 10, "y1": 10, "x2": 100, "y2": 100 },
+        "conf": 1
+      },
+      {
+        "ms": 900,
+        "box": { "x1": 10, "y1": 10, "x2": 100, "y2": 100 },
+        "conf": 1
+      },
+      {
+        "ms": 1000,
+        "box": { "x1": 10, "y1": 10, "x2": 100, "y2": 100 },
+        "conf": 1
+      },
+      {
+        "ms": 1100,
+        "box": { "x1": 10, "y1": 10, "x2": 100, "y2": 100 },
+        "conf": 1
+      }
+    ],
+    "gaps": [],
+    "swaps": []
+  },
+  "cases": [
+    { "name": "original", "start": 100, "end": 900, "pass": true },
+    { "name": "retimed", "start": 200, "end": 1000, "pass": true },
+    { "name": "low coverage", "start": 1100, "end": 1900, "pass": false },
+    {
+      "name": "gap",
+      "start": 200,
+      "end": 1000,
+      "gaps": [[200, 1000]],
+      "pass": false
+    },
+    {
+      "name": "swap inside",
+      "start": 200,
+      "end": 1000,
+      "swaps": [{ "ms": 900, "reason": "jump" }],
+      "pass": false
+    },
+    {
+      "name": "swap at exclusive end",
+      "start": 200,
+      "end": 1000,
+      "swaps": [{ "ms": 1000, "reason": "jump" }],
+      "pass": true
+    },
+    {
+      "name": "frame at exclusive end",
+      "start": 1100,
+      "end": 1200,
+      "pass": true
+    },
+    { "name": "empty interval", "start": 1000, "end": 1000, "pass": false }
+  ]
+}

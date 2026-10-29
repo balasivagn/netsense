@@ -4,7 +4,7 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { constants, createReadStream } from "node:fs";
 import {
   lstat,
   link,
@@ -261,14 +261,33 @@ export class LocalVideoStorage implements VideoStorage {
   async initMultipart(
     key: string,
     contentType: string,
+    reservedId?: string,
   ): Promise<{ uploadId: string }> {
-    return this.mutate(key, () => this.initUnlocked(key, contentType));
+    return this.mutate(key, () =>
+      this.initUnlocked(key, contentType, reservedId),
+    );
   }
 
   private async initUnlocked(
     key: string,
     contentType: string,
+    reservedId?: string,
   ): Promise<{ uploadId: string }> {
+    if (reservedId) {
+      validUploadId(reservedId);
+      try {
+        const state = await this.readState(key, reservedId);
+        if (state.contentType !== contentType || state.status !== "in_progress")
+          throw new StorageError("INVALID_UPLOAD_STATE", 409);
+        return { uploadId: reservedId };
+      } catch (error) {
+        if (
+          !(error instanceof StorageError) ||
+          error.message !== "UNKNOWN_UPLOAD"
+        )
+          throw error;
+      }
+    }
     if (!contentType || contentType.length > 200 || /[\r\n]/.test(contentType))
       throw new StorageError("INVALID_CONTENT_TYPE");
     const object = await this.target(key);
@@ -278,7 +297,7 @@ export class LocalVideoStorage implements VideoStorage {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
-    const uploadId = randomUUID();
+    const uploadId = reservedId ?? randomUUID();
     await this.saveState(key, uploadId, {
       key,
       contentType,
@@ -380,7 +399,13 @@ export class LocalVideoStorage implements VideoStorage {
         await link(temporary, object);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-        throw new StorageError("OBJECT_ALREADY_EXISTS", 409);
+        const digest = async (file: string) => {
+          const hash = createHash("sha256");
+          for await (const chunk of createReadStream(file)) hash.update(chunk);
+          return hash.digest("hex");
+        };
+        if ((await digest(object)) !== (await digest(temporary)))
+          throw new StorageError("OBJECT_ALREADY_EXISTS", 409);
       }
       await this.saveState(key, uploadId, {
         ...state,
@@ -536,6 +561,8 @@ export class LocalVideoStorage implements VideoStorage {
         const next = await reader.read();
         if (next.done) break;
         bytes += next.value.byteLength;
+        if (signed.uploadId && bytes > 8 * 1024 ** 2)
+          throw new StorageError("PART_TOO_LARGE", 413);
         hash.update(next.value);
         await writable.writeFile(next.value);
       }
@@ -582,6 +609,17 @@ export class LocalVideoStorage implements VideoStorage {
       reader.releaseLock();
       await rm(temporary, { force: true });
     }
+  }
+
+  async inspectPart(key: string, uploadId: string, partNumber: number) {
+    return this.mutate(key, async () => {
+      const etag = await this.partEtag(key, uploadId, partNumber);
+      return {
+        etag,
+        bytes: (await stat(await this.partPath(key, uploadId, partNumber)))
+          .size,
+      };
+    });
   }
 
   async partEtag(
@@ -646,7 +684,10 @@ export class LocalVideoStorage implements VideoStorage {
     const object = await this.target(key);
     let handle: Awaited<ReturnType<typeof open>>;
     try {
-      handle = await open(object, "r");
+      handle = await open(
+        object,
+        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+      );
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT")
         throw new StorageError("OBJECT_NOT_FOUND", 404);

@@ -1,0 +1,16 @@
+{
+  "coachStages": [
+    "Upload",
+    "Hear your remarks",
+    "Match remarks to moments",
+    "Follow your player",
+    "Place and check marks",
+    "Prepare preview"
+  ],
+  "runningJob": {
+    "status": "running",
+    "coachStage": "Match remarks to moments",
+    "progress": 0.25,
+    "progressLabel": "1 of 4"
+  }
+}

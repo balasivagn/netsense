@@ -13,13 +13,22 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as coachSessions from "../coachSessions.js";
 import type * as coaches from "../coaches.js";
 import type * as config from "../config.js";
+import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
+import type * as persistenceValidators from "../persistenceValidators.js";
+import type * as pipeline from "../pipeline.js";
+import type * as playback from "../playback.js";
+import type * as review from "../review.js";
+import type * as selectionFrames from "../selectionFrames.js";
 import type * as sessions from "../sessions.js";
 import type * as stageRuns from "../stageRuns.js";
 import type * as students from "../students.js";
+import type * as svc from "../svc.js";
 import type * as uploads from "../uploads.js";
+import type * as worker from "../worker.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -30,13 +39,22 @@ import type * as uploads from "../uploads.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  coachSessions: typeof coachSessions;
   coaches: typeof coaches;
   config: typeof config;
+  http: typeof http;
   jobs: typeof jobs;
+  persistenceValidators: typeof persistenceValidators;
+  pipeline: typeof pipeline;
+  playback: typeof playback;
+  review: typeof review;
+  selectionFrames: typeof selectionFrames;
   sessions: typeof sessions;
   stageRuns: typeof stageRuns;
   students: typeof students;
+  svc: typeof svc;
   uploads: typeof uploads;
+  worker: typeof worker;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,

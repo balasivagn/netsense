@@ -1,0 +1,27 @@
+{
+  "turns": [
+    {
+      "turnId": "t1",
+      "startMs": 1000,
+      "endMs": 1200,
+      "speaker": "synthetic_coach",
+      "text": "Hold your finish."
+    },
+    {
+      "turnId": "t2",
+      "startMs": 2000,
+      "endMs": 2200,
+      "speaker": "synthetic_coach",
+      "text": "Keep looking ahead."
+    },
+    {
+      "turnId": "t3",
+      "startMs": 2500,
+      "endMs": 2700,
+      "speaker": "synthetic_coach",
+      "text": "Take a short break."
+    }
+  ],
+  "audioDurationMs": 3000,
+  "providerSessionIds": []
+}

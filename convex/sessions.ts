@@ -7,10 +7,12 @@ export const create = mutation({
   args: {
     studentId: v.id("students"),
     subjectRole: role,
-    captureMode: v.union(
-      v.literal("camera"),
-      v.literal("camera_roll"),
-      v.literal("in_page"),
+    captureMode: v.optional(
+      v.union(
+        v.literal("camera"),
+        v.literal("camera_roll"),
+        v.literal("in_page"),
+      ),
     ),
   },
   handler: async (ctx, args) => {
@@ -139,5 +141,22 @@ export const setSubject = mutation({
       return enqueueJob(ctx, session, "subject_retrack");
     }
     return enqueueReady(ctx, session._id);
+  },
+});
+
+export const selectCaptureMode = mutation({
+  args: {
+    sessionId: v.id("sessions"),
+    captureMode: v.union(v.literal("camera"), v.literal("camera_roll")),
+  },
+  handler: async (ctx, args) => {
+    const session = await ownedSession(ctx, args.sessionId);
+    const uploads = await ctx.db
+      .query("uploads")
+      .withIndex("by_sessionId", (q) => q.eq("sessionId", session._id))
+      .collect();
+    if (uploads.length && session.captureMode !== args.captureMode)
+      throw Error("UPLOAD_CONFLICT");
+    await ctx.db.patch(session._id, { captureMode: args.captureMode });
   },
 });

@@ -80,7 +80,7 @@ Visual rules for every screen:
 | 03 | Sessions list (`03-sessions-list.png`) | `/sessions` | One row per session with live status from the latest `jobs` row. Filters All / Needs you / Shared. Row tap routes by state: processing → 12, review ready → 17, error → 13–16, shared → 23. | filter, open row, + New session | "! Fix" badge for failed sessions; "Still frames only" label for stills sessions; "Upload failed" after 3 upload attempts |
 | 04 | New session (`04-new-session.png`, **changed in v1.1**) | `/sessions/new` | Pick **who this lesson is for** (existing students or + Add a student by label) and what they are doing: **Batting / Bowling / Other**. Writes `sessions.studentId`, `sessions.subjectRole`. The wireframe's separate bowler picker is dropped (one person in focus, F1). No consent badges. | select, + Add a student, pick role, Continue | Continue disabled until a student and role are picked |
 | 06 | How to record (`06-how-to-record.png`) | `/sessions/[id]/record` | Main: Record with phone camera (`<input type="file" accept="video/*" capture="environment">`); Upload from camera roll (`<input type="file" accept="video/*">`). In-page recording is an **extra** (X1), hidden in M1. Writes `sessions.captureMode`. **Consent checkbox (required, C-C):** one checkbox above the buttons, unticked by default: "Everyone filmed in this clip is an adult and agreed to be filmed." Ticking it calls `sessions.confirmConsent` (stores `consentConfirmedAt`, `consentConfirmedBy`). Not a full consent flow. | Tick consent, Open camera, Pick clip | Open camera and Pick clip are disabled until the box is ticked; if `/api/uploads` still returns `CONSENT_REQUIRED` (e.g. stale tab), the box is shown unticked again with "Please confirm before uploading." Hide in-page option when MediaRecorder is missing (X1 only) |
-| 07a | **Pick who to follow** (new in v1.1, no wireframe yet; design gap flagged to Bala) | `/sessions/[id]/subject` (shown alongside 07 while the upload runs) | The browser decodes the chosen file locally (`<video>` + canvas, no network) and shows a frame scrubber. The coach scrubs to a frame where their player is clear and **taps the person**. Writes `sessions.subject = {frameMs, point: {x, y} (0–1), role, selectedBy: "coach", selectedAt}` via `sessions.setSubject`. Copy: "Tap the player to follow. Other people in the video are ignored." | scrub, tap, Retake tap, Confirm | No frame decodes in the browser (some HEVC on Android) → "Pick after upload": the step reappears on 12 using the server key frames once transcode finishes. The pipeline does not start until both the upload is complete and a subject is set. |
+| 07a | **Pick who to follow** (new in v1.1, no wireframe yet; design gap flagged to Bala) | `/sessions/[id]/subject` (shown alongside 07 while the upload runs) | The browser decodes the chosen file locally (`<video>` + canvas, no network) and shows a frame scrubber. The coach scrubs to a frame where their player is clear and **taps the person**. Writes `sessions.subject = {frameMs, point: {x, y} (0–1), role, selectedBy: "coach", selectedAt}` via `sessions.setSubject`. Copy: "Tap the player to follow. Other people in the video are ignored." | scrub, tap, Retake tap, Confirm | No frame decodes in the browser (some HEVC on Android) → "Pick after upload": complete the upload, then use selection-only server frames before the tap. The authenticated selection-frame endpoint below supplies real frames, including after reload without the local File. Analysis/transcode pipeline jobs still wait for the tap. The pipeline does not start until both the upload is complete and a subject is set. |
 | 07 | Upload progress (`07-upload-progress.png`) | `/sessions/[id]/upload` | Resumable multipart upload; progress counts only parts the server confirmed (`uploads.bytesConfirmed`, `partsConfirmed`). | Pause, Cancel (asks first) | Dropped connection or app switch → 08 |
 | 08 | Upload paused / failed (`08-upload-failed.png`) | same route, state | "Nothing is lost": confirmed parts are kept; retry with backoff. | Retry now, Choose the clip again (matched by SHA-256) | After 3 attempts Sessions shows "Upload failed"; checksum mismatch on re-pick: "This isn't the same clip" |
 | 09–11 | In-page recording (`09`, `10`, `11`) | `/sessions/[id]/record/live` | **Extra X1, option only, not in M1.** Spec in §22.3. | | |
@@ -482,7 +482,7 @@ Input `RenderInput`:
 {"kind": "preview|final", "mode": "video|stills", "proxyKey": "FileRef", "durationMs": 0,
  "segments": [{"segmentId": "string", "startMs": 0, "endMs": 0, "annotationIds": ["string"], "hash": "hex"}],
  "annotations": [{"annotationId": "string", "markType": "circle", "anchor": "box_top", "arrowFrom": null, "startMs": 0, "endMs": 0,
-                  "labelText": "string", "placedBy": "ai|coach", "trackFileRef": "FileRef"}],
+                  "labelText": "string", "placedBy": "ai|coach", "trackFileRef": "FileRef", "keyframeMs": 0}],
  "previousSegments": [{"segmentId": "string", "hash": "hex", "key": "FileRef"}]}
 ```
 Output `RenderOutput`:
@@ -490,7 +490,7 @@ Output `RenderOutput`:
 {"kind": "preview|final", "mode": "video|stills", "fileRef": "FileRef|null", "stillRefs": [{"annotationId": "string", "key": "FileRef"}],
  "segmentRefs": [{"segmentId": "string", "hash": "hex", "key": "FileRef"}], "durationMs": 0}
 ```
-Video: a segment is each annotated time range merged with neighbours closer than 1 s. For each segment, Pillow draws per-frame RGBA overlays from the track boxes (circle = ellipse around the anchor; arrow = from `arrowFrom` side toward the anchor; highlight = translucent box; label = text plate above the box); ffmpeg overlays them on the cut segment (`-c:v libx264 -crf 23`); un-annotated stretches are stream-copied where keyframes allow, else re-encoded; concat; `-movflags +faststart`. AI-placed marks render dashed; coach-placed solid. Final render reuses segment files whose `hash` (annotation content + track ref) has not changed, so only affected segments re-render. Stills: one JPEG per annotation at the key frame. Errors → `RENDER_FAIL`; the UI falls back to the live overlay. Timeout 300 s, retry 2.
+Video: a segment is each annotated time range merged with neighbours closer than 1 s. For each segment, Pillow draws per-frame RGBA overlays from the track boxes (circle = ellipse around the anchor; arrow = from `arrowFrom` side toward the anchor; highlight = translucent box; label = text plate above the box); ffmpeg overlays them on the cut segment (`-c:v libx264 -crf 23`); un-annotated stretches are stream-copied where keyframes allow, else re-encoded; concat; `-movflags +faststart`. AI-placed marks render dashed; coach-placed solid. Final render reuses segment files whose `hash` (annotation content + track ref) has not changed, so only affected segments re-render. Stills: one JPEG per annotation at the selected key frame. `RenderInput.annotations.keyframeMs` is required and comes from that remark's persisted `MomentOutput.keyframeMs`; rendering never substitutes the first observed track frame. It must be inside the annotation's half-open interval and have a safe subject observation. An unavailable or unsafe selected frame fails the render. This field is also included in segment hashes. Errors → `RENDER_FAIL`; the UI falls back to the live overlay. Timeout 300 s, retry 2.
 
 ---
 
@@ -589,16 +589,16 @@ Document limit is 1 MiB: tracks, masks, key frames and renders live in storage; 
 |---|---|---|
 | `coaches` | `clerkUserId`, `displayName`, `createdAt` | `by_clerkUserId` |
 | `students` | `coachId`, `label` (first name or nickname), `contactMasked?` (e.g. `+65 •••• 21`, optional), `createdAt` | `by_coachId` |
-| `sessions` | `coachId`, `studentId: v.id("students")` (who the lesson is for), `subjectRole: "batter"\|"bowler"\|"other"`, `subject?: Subject` (§7 common types; tapped on 07a), `subjectStatus: "needed"\|"set"\|"anchored"\|"anchor_failed"`, `subjectAnchor?: {box, frameMs, referenceCropKey}`, `captureMode: "camera"\|"camera_roll"\|"in_page"`, `renderMode: "video"\|"stills"`, `consentConfirmedAt?: number` (ms; set by the screen 06 checkbox, C-C), `consentConfirmedBy?: string` (Clerk user ID of the confirming coach), `isDemoFallback: boolean` (§22.4), `status: "draft"\|"uploading"\|"processing"\|"needs_you"\|"review_ready"\|"shared"\|"failed"`, `latestJobId?`, `durationMs?`, `createdAt` | `by_coachId_createdAt` |
-| `uploads` | `sessionId`, `coachId`, `storageKey`, `driver: "r2"\|"local"`, `multipartUploadId?`, `mimeType`, `bytesTotal`, `bytesConfirmed`, `partSize`, `partsConfirmed: number[]`, `sha256`, `status: "in_progress"\|"paused"\|"complete"\|"failed"\|"aborted"`, `attempts`, `createdAt`, `completedAt?` | `by_sessionId` |
+| `sessions` | `coachId`, `studentId: v.id("students")` (who the lesson is for), `subjectRole: "batter"\|"bowler"\|"other"`, `subject?: Subject` (§7 common types; tapped on 07a), `subjectStatus: "needed"\|"set"\|"anchored"\|"anchor_failed"`, `subjectAnchor?: {box, frameMs, referenceCropKey}`, `captureMode?: "camera"\|"camera_roll"\|"in_page"`, `renderMode: "video"\|"stills"`, `uploadFailures?: number`, `uploadAttempt?: number`, `uploadAttemptActive?: boolean` (server-issued whole-upload attempt/report lifecycle; see §9), `consentConfirmedAt?: number` (ms; set by the screen 06 checkbox, C-C), `consentConfirmedBy?: string` (Clerk user ID of the confirming coach), `isDemoFallback: boolean` (§22.4), `status: "draft"\|"uploading"\|"processing"\|"needs_you"\|"review_ready"\|"shared"\|"failed"`, `latestJobId?`, `durationMs?`, `createdAt` | `by_coachId_createdAt` |
+| `uploads` | `sessionId`, `coachId`, `storageKey`, `driver: "r2"\|"local"`, `multipartUploadId?`, `mimeType`, `bytesTotal`, `bytesConfirmed`, `partSize`, `partsConfirmed: number[]`, `confirmedParts?: {partNumber,etag,bytes}[]`, `phase?: "completing"\|"aborting"`, `sha256`, `status: "in_progress"\|"paused"\|"complete"\|"failed"\|"aborted"`, `attempts`, `createdAt`, `completedAt?` | `by_sessionId` |
 | `pipeline_config` | `version`, `active: boolean`, `stages: StageConfig[]` (§17), `coachStages`, `limits`, `createdAt`, `note` | `by_version`, `by_active` |
 | `jobs` | `sessionId`, `coachId`, `kind: "pipeline"\|"subject_retrack"\|"remark_retrack"\|"stage_retry"\|"finalize"`, `remarkId?`, `stage?`, `configVersion` (pinned at creation), `status: "queued"\|"running"\|"done"\|"failed"\|"waiting_for_coach"\|"cancelled"`, `coachStage`, `progress?`, `progressLabel?`, `errorCode?`, `attempt`, `maxAttempts`, `leaseOwner?`, `leaseUntil?`, `heartbeatAt?`, `sandboxId?`, `sandboxName?`, `lastStageDone?`, `samFrames`, `inputTokens`, `outputTokens`, `costUsd`, `createdAt`, `startedAt?`, `endedAt?` | `by_status_createdAt`, `by_sessionId` |
 | `sandboxes` | `jobId`, `sandboxId`, `sandboxName`, `driver: "modal"\|"local"`, `createdAt`, `terminatedAt?`, `terminatedBy?: "orchestrator"\|"sweeper"\|"timeout"\|"self"`, `exitCode?` | `by_jobId`, `by_terminatedAt` |
-| `stageRuns` | `jobId`, `sessionId`, `stage`, `remarkId?`, `workerId`, `workerType`, `provider`, `modelVersion?`, `promptHash?`, `candidate?`, `attempt`, `idempotencyKey`, `status: "queued"\|"running"\|"done"\|"failed"\|"skipped"\|"fallback"\|"needs_coach"`, `errorCode?`, `errorDetail?` (≤ 500 chars, no transcript text), `inputHash`, `outputRef?` (storage key or table id), `startedAt?`, `endedAt?`, `latencyMs?`, `samFrames?`, `inputTokens?`, `outputTokens?`, `costUsd?` | `by_jobId_stage`, `by_jobId_remarkId`, `by_idempotencyKey` |
+| `stageRuns` | `jobId`, `sessionId`, `stage`, `remarkId?`, `workerId`, `workerType`, `provider`, `modelVersion?`, `promptHash?`, `candidate?`, `attempt`, `idempotencyKey`, `status: "queued"\|"running"\|"done"\|"failed"\|"skipped"\|"fallback"\|"needs_coach"`, `errorCode?`, `errorDetail?` (≤ 500 chars, no transcript text), `inputHash`, `persistedOutputHash?` (internal SHA-256 receipt), `persistedAnnotationIds?` (internal marks response receipt), `persistedTrackBinding?` (internal `{trackId,fileRef}` receipt), `outputRef?` (storage key or table id), `startedAt?`, `endedAt?`, `latencyMs?`, `samFrames?`, `inputTokens?`, `outputTokens?`, `costUsd?` | `by_jobId_stage`, `by_jobId_remarkId`, `by_idempotencyKey` |
 | `transcriptTurns` | `sessionId`, `turnId`, `startMs`, `endMs`, `speaker`, `text` (immutable), `correctedText?`, `correctedAt?` | `by_sessionId_turnId` |
 | `remarks` | `sessionId`, `remarkId`, `turnIds: string[]`, `source: "voice"\|"typed"`, `aboutSubject: "yes"\|"no"\|"unclear"\|"general"`, `kind`, `atMs`, `mode: "tracked"\|"still_frame"\|"note_only"`, `momentStartMs?`, `momentEndMs?`, `keyframeMs?`, `momentWhy?`, `status: "pending"\|"ok"\|"player_missing"\|"needs_coach"`, `includeInShare: boolean` | `by_sessionId` |
 | `annotations` | `sessionId`, `remarkId`, `markId`, `markType`, `anchor`, `arrowFrom?`, `role`, `startMs`, `endMs`, `labelSpan?`, `labelText`, `neutralLabel?`, `trackId?`, `why`, `status: "needs_you"\|"approved"\|"deleted"\|"player_missing"`, `placedBy: "ai"\|"coach"`, `aiPlacement?` (original AI values, for the dashed range on 20), `checkVerdict?`, `provenance: Provenance` (§7), `approvedAt?`, `updatedAt` | `by_sessionId_status`, `by_remarkId` |
-| `tracks` | `sessionId`, `remarkId`, `trackId`, `role`, `mode`, `fileRef`, `maskRef?`, `coverage`, `cacheKey` | `by_sessionId`, `by_cacheKey` |
+| `tracks` | `sessionId`, `remarkId`, `trackId`, `role`, `mode`, `fileRef`, `maskRef?`, `coverage`, `cacheKey` | `by_sessionId`, `by_cacheKey`, `by_trackId` |
 | `agentTraces` | `stageRunId`, `jobId`, `remarkId?`, `model`, `promptHash`, `framesViewed?: number[]`, `parsedOutput` (JSON), `why?`, `latencyMs`, `inputTokens`, `outputTokens` | `by_stageRunId` |
 | `renders` | `sessionId`, `jobId`, `kind: "preview"\|"final"`, `mode`, `fileRef?`, `stillRefs`, `segmentRefs`, `status: "ready"\|"failed"`, `createdAt` | `by_sessionId_kind` |
 | `lessons` | `sessionId`, `coachId`, `notes: {text, source: "coach"\|"ai_draft", approved, why?}[]`, `focusPoints: {id, title, source, approved, why?, remarkIds, editedByCoach}[]` (≤ 2 approved), `practice: {...same shape}[]`, `nextSessionFocus?: {title, why, remarkIds, source, approved}`, `snapshotId?` | `by_sessionId` |
@@ -608,13 +608,16 @@ Document limit is 1 MiB: tracks, masks, key frames and renders live in storage; 
 | `consents` | **later**, not created in M1 (full consent flow; M1 has only the `sessions.consentConfirmed*` checkbox fields) | |
 
 Key Convex functions (TypeScript, `convex/`):
-- `sessions.create` (student + `subjectRole`), `sessions.list`, `sessions.get`, `sessions.setRenderMode`, `sessions.setSubject` (owner only; validates point in 0–1 and `frameMs` ≤ duration when known; if the upload is already complete and no pipeline job exists, enqueues it; if a pipeline has run, enqueues `subject_retrack`).
+- `sessions.create` (student + `subjectRole`; optional `captureMode` for compatibility, omitted by screen 04), `sessions.selectCaptureMode` (owner-only camera/camera_roll choice on screen 06; cannot change the mode after an upload reservation), `sessions.list`, `sessions.get`, `sessions.setRenderMode`, `sessions.setSubject` (owner only; validates point in 0–1 and `frameMs` ≤ duration when known; if the upload is already complete and no pipeline job exists, enqueues it; if a pipeline has run, enqueues `subject_retrack`).
 - `sessions.confirmConsent` (owner only; sets `consentConfirmedAt = now` and `consentConfirmedBy = ctx.auth` user ID; idempotent: a second call keeps the first values).
 - `students.list`, `students.add`.
 - `uploads.*` internal mutations called from the VM API (§10.2).
 - `jobs.enqueue` (internal; pins the active `pipeline_config.version`), `jobs.claim` (atomic: oldest `queued` → `running`, sets `leaseOwner`, `leaseUntil = now + JOB_LEASE_S`, `attempt += 1`), `jobs.heartbeat`, `jobs.setSandbox`, `jobs.markReleased`, `jobs.finish`, `jobs.requeueStage`, `jobs.requestFinalize`, `jobs.cancel`.
+- `coachSessions.list` / `coachSessions.detail`: owner-scoped coach projections only: student label, subject role/set flag, capture mode, session status/render mode/fallback flag, upload confirmed bytes/total/status, failure count, and latest job `{id,status,coachStage,progress?,progressLabel?,errorCode?,coachStages}`. Labels come from the job's pinned config version, never the current active config. No full config, storage URLs, internal leases/tokens, provider or model fields.
+- Draft `sessions.captureMode` is absent until chosen; upload init and the private reservation reject `CAPTURE_MODE_REQUIRED` before storage work if absent. Existing callers supplying a mode remain valid.
+- `coachSessions.beginAttempt` issues/reuses one active server generation after consent and mode selection. `failAttempt({sessionId,attempt})` records one failure only for that active generation, ignoring duplicate/stale/unissued reports and completed/aborted uploads. No client-supplied totals. Three persisted failures block further whole-upload attempts/reservations, while already completed sources remain recoverable. Browser-observed failures are reported (the server cannot independently observe a dropped browser network); pause/cancel/disposal do not count. A coach/session-scoped local pending-report generation is retried before the next admission, including reload when browser storage is available. It contains no media or signed URLs. Browser storage being unavailable, or clearing it before an offline report reaches Convex, cannot guarantee delivery of that report.
 - `stageRuns.start`, `stageRuns.finish` (also rolls up `jobs.coachStage/progress/progressLabel` from `pipeline_config.coachStages`).
-- `pipeline.persistTurns`, `persistPlan`, `persistMoment`, `persistTarget`, `persistTrack`, `persistMarks`, `persistVerdicts`, `persistRender`, `persistNextFocus`. `persistPlan` and `persistMarks` re-copy coach words from `transcriptTurns` and reject on byte mismatch (`VERBATIM_MISMATCH`).
+- `pipeline.persistTranscode`, `persistTurns`, `persistPlan`, `persistMoment`, `persistTarget`, `persistTrack`, `persistMarks`, `persistVerdicts`, `persistRender`, `persistNextFocus`. `persistPlan` and `persistMarks` re-copy coach words from `transcriptTurns` and reject on byte mismatch (`VERBATIM_MISMATCH`).
 - `review.approve`, `review.edit`, `review.move`, `review.delete`, `review.undoDelete`, `review.correctTurn`, `review.addTypedRemark`, `lessons.update`. No mutation approves more than one item.
 - `share.create` (builds `lessonSnapshots` from approved items only, returns the token and code once), `share.revoke`, `share.status`.
 - `costLedger.add`, `costLedger.today`.
@@ -623,6 +626,10 @@ Key Convex functions (TypeScript, `convex/`):
 ---
 
 ## 10. Routes and APIs
+
+### 10.3a HTTP lifecycle clarification (T1.10 slice)
+
+`/svc/*` requires `Authorization: Bearer <CONVEX_SERVICE_SECRET>` and fails closed when the secret is unset. Worker job tokens contain exactly `{jobId,sessionId,exp}` where `exp` is epoch milliseconds. The signature is HMAC-SHA256 over the **raw UTF-8 JSON payload bytes**, then both payload and signature are base64url encoded as `payload.signature`; it is not an HMAC over an encoded segment. Core persistence routes are registered as specified in §10.4; cost, nextFocus and agent trace persistence remain pending.
 
 ### 10.1 Pages (Next.js App Router, `apps/web/app/`)
 | Route | Screens | Auth |
@@ -650,22 +657,182 @@ Key Convex functions (TypeScript, `convex/`):
 | `POST /api/uploads` | coach | `{sessionId, fileName, mimeType, bytesTotal, sha256}` → `{uploadId, partSize, partCount, resumeFrom: number[]}`. Starts multipart (R2) or a local temp file. Matching `sha256` for the same session resumes. Rejects with `409 CONSENT_REQUIRED` unless `sessions.consentConfirmedAt` is set (C-C). |
 | `POST /api/uploads/[uploadId]/parts` | coach | `{partNumbers: number[]}` → `{urls: [{partNumber, url, expiresAt}]}` (presigned PUT, TTL 15 min) |
 | `POST /api/uploads/[uploadId]/parts/confirm` | coach | `{partNumber, etag, bytes}` → `{bytesConfirmed}` (progress counts confirmed parts only) |
-| `POST /api/uploads/[uploadId]/complete` | coach | `{}` → `{jobId}`. Completes multipart, `HEAD` checks size = `bytesTotal`, then `jobs.enqueue(kind="pipeline")` **only if `sessions.subject` is set**; otherwise the session waits in `subjectStatus = "needed"` and `sessions.setSubject` enqueues. SHA-256 is verified by `transcode`. |
+| `POST /api/uploads/[uploadId]/complete` | coach | `{}` → `{jobId: string|null}` (`null` while waiting for the subject tap). Completes multipart, `HEAD` checks size = `bytesTotal`, then `jobs.enqueue(kind="pipeline")` **only if `sessions.subject` is set**; otherwise the session waits in `subjectStatus = "needed"` and `sessions.setSubject` enqueues. SHA-256 is verified by `transcode`. |
 | `POST /api/uploads/[uploadId]/abort` | coach | → `{}` (asks first in the UI) |
+| `GET /api/sessions/[id]/selection-frames` | coach | No body/query → `{selectionFrames:[{idx,ms,width,height,url}]}`. Completed owned consented local source only; selection-only bounds below. |
 | `PUT /api/media/local/[...key]` | HMAC signed URL | local driver only: receives a part or file |
 | `GET /api/media/local/[...key]` | HMAC signed URL | local driver only: serves with `Range` support |
 | `POST /api/media/sign` | coach | `{sessionId, asset: "proxy"\|"preview"\|"final"\|"audio"\|"still:{annotationId}"\|"track:{remarkId}"}` → `{url, expiresAt}` (TTL `SIGNED_URL_TTL_SECONDS`, default 600) |
 | `POST /api/l/[token]/code` | public, rate-limited | `{code}` → `200 {ok}` + `ns_student` cookie, `401 {error:"wrong_code", attemptsLeft}`, `423 {error:"locked", retryAt}`, `410 {error:"stopped"}` |
 | `GET /api/l/[token]/lesson` | student cookie | → snapshot payload for the UI (no coach id, no other students) |
 | `POST /api/l/[token]/media` | student cookie | `{asset}` → signed URL for an asset in the snapshot only |
-| `POST /api/worker/sign` | worker job token | `{ops: [{op: "get"\|"put", key, contentType?}]}` → signed URLs; keys must be under `sessions/{sessionId}/` for the token's session |
+| `POST /api/worker/sign` | worker job token | `{ops: [{op: "get"\|"put", key, contentType?}]}` → `{urls:[{op,key,url,expiresAt}]}` in request order; keys must be canonical keys strictly under `sessions/{sessionId}/` for the token's session. PUT requires `contentType`; GET forbids it. The route validates all operations before signing and returns no partial result. `expiresAt` is epoch milliseconds, capped by the token, live job lease and `SIGNED_URL_TTL_SECONDS` (default 600). |
 | `GET /api/health` | public | `{ok, version, convex: bool, storage: bool, orchestrator: {lastPollAt}}` (no secrets, no counts of users) |
+
+#### Screen 07a selection-only fallback (T1.35 partial; T1.05/T1.06 integration)
+
+`GET /api/sessions/[id]/selection-frames` has no query parameters or body.
+It uses `getCoachRouteAuth` and the coach's Convex token to call the owner-only
+`selectionFrames.source({sessionId})` query. That read requires consent, exactly
+one canonical local source, authoritative upload completion, confirmed size and
+immutable expected SHA-256. Foreign, missing, incomplete and aborted sources fail
+before storage/tools. It does not enqueue jobs or write Convex records.
+The no-store response is `{selectionFrames:[{idx,ms,width,height,url}]}`; URLs
+expire after 300 seconds and are refreshed by repeating this authorized request.
+Errors are fixed `UNAUTHENTICATED` (401), `INVALID_REQUEST` (400), or
+`SELECTION_BUSY`/`SELECTION_UNAVAILABLE` (409); diagnostics are never returned.
+No source key, external URL, path or tool argument is accepted from a client.
+The browser bounds the response to 32 KiB and 100 seconds (headers and body),
+rejects redirects, validates the closed frame envelope/count/timestamps/geometry
+and session-scoped local media paths, and cancels stale requests on scope changes.
+
+Local driver only; R2 fails closed. Real `ffprobe`/`ffmpeg` must be on PATH
+(ffmpeg 8+ for the square-pixel scale filter). Private temporary directories use
+TMPDIR when configured, otherwise ignored `.orca-scratch/`, with mode 0700.
+The source is streamed through LocalVideoStorage's regular-file/no-follow boundary
+into private scratch, capped at 2 GiB and checked against exact size/SHA before
+any tool or output, including cache hits. No generic coach signing API is added.
+
+Optional `SELECTION_FRAME_COUNT` defaults to 12 (integer 2–24), and
+`SELECTION_MAX_DURATION_S` defaults to 600 (integer 1–600). Blank/unset uses the
+default; invalid settings fail closed. Duration must be positive, within that cap;
+input raster is at most 8192 per side and 33,554,432 pixels. Seek targets are
+evenly spaced from zero through `(count-1)/count` of duration. Each seek emits
+one real JPEG with its measured clip-relative PTS (`copyts` + `start_at_zero`,
+rounded milliseconds), deduplicating
+identical times. Automatic display rotation and square-pixel normalization precede
+aspect-preserving scaling inside 640×640. Geometry comes from the output filter;
+points remain normalized to that displayed frame, consistent with pipeline display
+orientation. No guessed timestamps or fabricated frames. These sparse selection
+frames are separate from full transcode's 2 fps keyframes.
+
+Hard request deadline: 90 seconds covering auth, source I/O and all tools. Client
+cancellation aborts I/O, kills/reaps the active child before scratch cleanup.
+At most four requests and four outstanding auth operations are admitted per process
+(no waiting queue). At most two extractions run per process, one per source/config identity;
+excess and overlapping callers get busy immediately, with no pending extraction
+queue. Tool arguments are arrays, no shell; demuxers restricted to MOV/Matroska/WebM,
+protocols file/pipe, one codec/filter thread, allocation limit 64 MiB,
+combined captured diagnostics 64 KiB, JPEG 1 MiB and total JPEG bytes 8 MiB.
+All children receive PATH/optional TMPDIR and fixed NODE_ENV only, no inherited
+credentials. Success, failure and cancellation remove private scratch.
+
+Derived keys are `sessions/{id}/selection/{sourceSha}/v1-{count}-{durationCap}/{index}.jpg`.
+All JPEGs are extracted and validated before publication; storage atomically
+publishes each complete file. A bounded 64-entry process-local completed manifest
+is installed only after every publication succeeds, with JPEG hashes. Cache reuse
+revalidates the original source and all cached JPEG hashes; missing/corrupt cache
+is rebuilt. No incomplete manifest is signed/returned. A partial publication on
+I/O failure has no completed manifest; retry rebuilds it. After web-process restart
+frames are regenerated from the completed source (no in-memory File required).
+This follows the existing single-web-process local storage assumption; no shared
+multi-process cache guarantee. No signed URL is stored in DB, manifest or logs.
+No proxy/audio/transcript/anchor/tracking/model call is made. Analysis still waits
+for completed upload AND a coach-confirmed subject through the unchanged gate.
+Live auth/browser/vendor behavior and resource performance remain **UNTESTED**.
+
+#### Local upload backend boundary (T1.06 / T1.37 partial)
+
+All five upload POST bodies are closed JSON objects, at most 32 KiB with a
+10-second streamed-body deadline. Abort also requires `{}`. Unauthenticated
+requests return `401 {error:"UNAUTHENTICATED"}`; absent stored consent returns
+`409 {error:"CONSENT_REQUIRED"}` before any storage call. Invalid size/MIME/hash
+returns `400 {error:"INVALID_REQUEST"}`; other rejected operations expose only
+`409 {error:"UPLOAD_REJECTED"}` (including foreign/missing rows). Missing private
+service configuration returns `503 {error:"SERVICE_UNAVAILABLE"}`. Responses use
+`Cache-Control: no-store`; no upload path logs payloads, identities or URLs.
+
+The local slice accepts integer `bytesTotal` in 1..2 GiB; browser file admission,
+recovery metadata and confirmed-byte responses enforce that same cap before
+hashing or upload. MIME is `video/mp4`,
+`video/quicktime`, or `video/webm`. SHA-256 is lowercase 64 hex. `fileName` is
+validated as a nonempty string <=1024 characters and never used as a storage key.
+Parts are 8 MiB except the final remainder; signing accepts 1..32 unique part
+numbers within `ceil(bytesTotal/partSize)`, with a 900-second TTL. Source keys are
+`sessions/<sessionId>/source/original`. One source
+identity is reserved per session: matching SHA/size/MIME resumes, conflicting
+identity is rejected. Aborted/failed uploads remain terminal; re-init never
+reopens them. Completed re-init returns the existing confirmed progress.
+
+Next calls `getCoachRouteAuth`, then uses its Convex token for `sessions.get` or
+owner-only `uploads.owned({uploadId})`. It takes `coachId` from the owned row,
+never from the request. Storage measurements are server-only. The private bridge
+is `POST ${CONVEX_SITE_URL}/svc/uploads/<operation>`, authenticated with
+`Authorization: Bearer ${CONVEX_SERVICE_SECRET}` from server env. These endpoints
+call INTERNAL mutations, repeat session/upload ownership and stored consent
+checks, and never accept Clerk/browser authorization as service authorization.
+Closed private request/response wires:
+
+| operation | request | response |
+|---|---|---|
+| reserve | `{sessionId,coachId,sha256,mimeType,bytesTotal,multipartUploadId}` | authoritative upload document |
+| confirm | `{uploadId,coachId,partNumber,etag,bytes}` | `{bytesConfirmed}` |
+| begin | `{uploadId,coachId,operation:"completing"\|"aborting"}` | authoritative upload document |
+| complete | `{uploadId,coachId,verifiedBytes}` | `{jobId:string\|null}` |
+| abort | `{uploadId,coachId}` | `{}` |
+
+An authoritative upload document contains the §9 upload fields plus Convex
+`_id`/`_creationTime`; optional `confirmedParts:[{partNumber,etag,bytes}]` and
+`phase:"completing"|"aborting"` are added. Legacy rows may lack these optional
+fields. New reservations persist a server-generated UUID before touching disk.
+Private requests are bounded to 32 KiB/10 seconds; private responses to 256 KiB;
+authenticated Convex query responses to 1 MiB. Next service/query fetches have
+10-second deadlines, disable redirects and disable Convex client logging.
+
+Reservation is transactional and returns the winning UUID on duplicate init,
+including a lost response; losers never create storage. `initMultipart` accepts
+an optional reserved UUID and is idempotent for that key/type/UUID. Local
+`inspectPart` returns actual disk length and SHA-256 ETag under the storage lock.
+Browser `bytes`/`etag` must equal those measurements; Convex checks the exact
+expected part length and deduplicates matching confirmations. Every local part
+is immutable from first PUT (byte-identical retries succeed); multipart PUTs
+are capped at 8 MiB. Confirmed metadata and progress survive reload.
+
+`begin` atomically reserves completing or aborting; competing operations fail,
+while identical retries continue the winning transition. Completing requires all
+parts confirmed. After idempotent assembly, Next checks actual HEAD size and
+only then persists complete/enqueues. A response lost after disk or DB success
+is retryable; local assembly recovers an existing byte-identical object even
+if its completion metadata write was interrupted. Aborting removes parts before
+persisting terminal state; retries also recover disk-success/DB-failure, including
+reservation before initial storage creation. The first reserved transition wins
+an abort/complete race. Completing reservations remain retryable on transient
+failures; disk corruption requires operator repair before retry. Init/abort races
+share the same UUID and local storage lock, leaving an aborted tombstone rather
+than an orphan multipart directory. `enqueueReady` and subject selection serialize
+transactionally, so either tap order creates exactly one pipeline job. No
+pre-tap processing is introduced.
+
+Local locking supports the existing single web-process deployment only. R2 is
+**UNTESTED and unavailable** in this slice; the configured R2 adapter fails
+closed. UI consent/progress wiring, selection-frame fallback, real Clerk login,
+and Playwright/M1 E2E remain pending; T1.06/T1.37 are PARTIAL.
 
 ### 10.3 Convex `/svc/*` HTTP actions (orchestrator)
 Header `Authorization: Bearer ${CONVEX_SERVICE_SECRET}`. `POST /svc/jobs/claim` → job or `204`; `POST /svc/jobs/sandbox` `{jobId, sandboxId, sandboxName}`; `POST /svc/jobs/released` `{jobId, sandboxId, terminatedBy, exitCode}`; `POST /svc/jobs/fail` `{jobId, errorCode}`; `GET /svc/jobs/stale` → jobs `running` with `leaseUntil < now` or `heartbeatAt` older than `HEARTBEAT_STALE_S`; `GET /svc/sandboxes/open`.
 
 ### 10.4 Convex `/worker/*` HTTP actions (runner in the sandbox)
-Header `Authorization: Bearer <jobToken>`. `jobToken` = `base64url(payload).base64url(HMAC-SHA256(WORKER_TOKEN_SECRET, payload))`, payload `{jobId, sessionId, exp}`, `exp = sandbox timeout + 5 min`. Every call checks that `jobId` is `running` and not past its lease. Endpoints: `GET /worker/job` (pinned config, session, inputs); `POST /worker/heartbeat` (extends lease); `POST /worker/stageRuns/start|finish`; `POST /worker/persist/{turns|plan|moment|target|track|marks|verdicts|render|nextFocus}`; `POST /worker/cost`; `POST /worker/done` `{status: "waiting_for_coach"|"failed"|"done", errorCode?}`. The same token authorises `/api/worker/sign` on the VM.
+Header `Authorization: Bearer <jobToken>`. `jobToken` = `base64url(payload).base64url(HMAC-SHA256(WORKER_TOKEN_SECRET, payload))`, payload `{jobId, sessionId, exp}`, `exp = sandbox timeout + 5 min`. Every call checks that `jobId` is `running` and not past its lease. Endpoints: `GET /worker/job` (pinned config, session, inputs); `POST /worker/heartbeat` (extends lease); `POST /worker/stageRuns/start|finish`; `POST /worker/persist/{transcode|turns|plan|moment|target|track|marks|verdicts|render}`; `POST /worker/cost`; `POST /worker/done` `{status: "waiting_for_coach"|"failed"|"done", errorCode?}`. The same token authorises `/api/worker/sign` on the VM.
+
+
+**T1.10 bounded lifecycle clarification (PARTIAL).** The implemented routes and exact request/response projections are documented in `L2_HTTP_HANDOFF.md` (including `JobWire`, `ClaimResponse`, and `WorkerJobResponse`). Core persistence is implemented by the separately documented `L2_PERSISTENCE_HANDOFF.md` slice. `/worker/cost`, `/worker/persist/nextFocus`, agent trace persistence and final render integration remain unregistered/pending; T1.10 stays PARTIAL. Claim requires `{leaseOwner}`; sandbox registration also requires `driver:"local"|"modal"`. Pinned config responses contain only generated `PipelineConfig` fields, never Convex metadata. Claims use the duration/kind timeout formula in §11 and the actual SGT date for global ledger spend; absent measured duration uses pinned `maxVideoMinutes` only for timeout budgeting. Enabled stage timeout values do not determine sandbox lifetime.
+
+Token `exp` is epoch milliseconds; HMAC signs raw UTF-8 JSON bytes of exactly `{jobId,sessionId,exp}`, not the base64url segment. Every worker read/write verifies token, session pairing, ownership, running job and strictly live lease in one query/mutation transaction (`leaseUntil <= now` rejects). The only terminal exception is an unexpired-token, exact same `/worker/done` status/error replay, which changes no state or timestamps; service failure clears the lease and cannot qualify as that replay. Other terminal access and conflicting completion reject. Completion without an error enters `review_ready`; actionable errors enter `needs_you`; failed enters `failed`. `RENDER_FAIL` preserves review/live-overlay access per §15; only `SUBJECT_NEEDED` changes subject status to `anchor_failed`. Late `/svc/jobs/fail` preserves completed sessions.
+
+Lifecycle POST bodies enforce a streamed 32 KiB limit even without an accurate Content-Length, closed typed fields and safe fixed-code errors. Stage finish requires run ownership and canonical session output keys, rejects raw error detail, and deduplicates identical usage replays. Worker job inputs project completed upload metadata, actual studentLabel (owned `students.label`, fail closed when missing/empty/foreign), subjectRole, tap/anchor/render/duration, turns, remarks and completed artifact references; subject-retrack includes prior completed stages 0–3 in the same session without fabricating absent outputs. Sandbox registration requires a running/live job, exact registrations are idempotent, active conflicts reject, and a released prior sandbox permits a later attempt. Release changes only its exact sandbox row and preserves termination metadata. Stale threshold defaults to 90 seconds and invalid environment values fail closed. Live Convex remains **UNTESTED**.
+
+
+**Core persistence wire (T1.10 PARTIAL).** Each core POST uses a closed JSON envelope `{stageRunId,output}`; track additionally requires `{cacheKey}` (64 lowercase hexadecimal characters, computed by the runner per §7.5), and marks additionally requires `{provenance:Provenance}`. `stageRunId` is the actual Convex row ID. The endpoint/output pairs are `transcode:TranscodeOutput`, `turns:TranscribeOutput`, `plan:PlanOutput` (postprocessed, never model output), `moment:MomentOutput`, `target:SubjectAnchorOutput` for a session-level subject run or `SubjectOutput` for a per-remark subject run, `track:TrackOutput`, `marks:PlaceOutput`, `verdicts:CheckOutput`, `render:RenderOutput`. No body-supplied coach/session/job identity is accepted. Responses are exactly `{ok:true}`, except marks returns `{ok:true,annotationIds:[{markId,annotationId}]}` sorted by markId. This adds transcode metadata persistence to carry the existing §7.0 measured duration into `sessions.durationMs`; it does not extract pre-tap selection frames or add a capability.
+
+Persistence bodies have a streamed **1,048,576-byte total envelope limit** (including metadata), independent of Content-Length. The generated closed validators plus generated source-schema validation enforce all JSON Schema constraints, including finite numbers, patterns, lengths and uniqueness, before writes. Pure schema evaluation uses no runtime compilation/eval; generation fails on unsupported validation keywords. Safe errors expose only fixed codes; verbatim mismatches return `VERBATIM_MISMATCH`, other rejected worker transactions return `WORKER_REJECTED`, malformed/oversize bodies return `INVALID_REQUEST`.
+
+Every persistence mutation repeats token/latest-running-job/live-lease/session/coach checks, verifies stage/remark and pinned worker configuration, then atomically stores projections and a SHA-256 receipt of recursively key-sorted JSON `{output,...endpointMetadata}`. The internal optional `stageRuns.persistedOutputHash` is not public StageRun JSON and stores no output text. Marks also retain only their stable response mapping in `persistedAnnotationIds`; track retains only `{trackId,fileRef}` in `persistedTrackBinding` so placement binds to the verified track run's actual row/ref. Failed validation rolls back receipt and projections. Persist while running, then finish the stage. Identical retries (including after stage done, while the job is still live) are no-ops; mutated repeats reject. All stopped-job persists deny. Retries never recreate, approve or reset coach edits; stable marks responses survive later derived-row changes.
+
+New attempts can update unedited derived moments/tracks/marks and unapproved, unedited AI lesson drafts. Existing original transcript text/speaker/times and remark turn assignments are immutable; corrections remain separate. Coach-origin, approved, deleted or placement-edited marks are protected, and their bound tracks/moments cannot be replaced. Coach notes and approved/edited lesson drafts are retained. Other-person/general remarks are note-only without fanout; share inclusion uses pinned `otherPersonRemarksInShare`. No subject target table is created: full per-remark targets remain runner artifacts. Server validates canonical references, not the media contents; TrackFile `subjectOnly`, frame-level coverage and swap checks remain runner responsibilities.
+
+Marks require provenance maps keyed by `moment,subject,track,place`, exactly one real run for each, same session/remark and pinned configuration. `workers` maps those stage keys to actual worker IDs; `modelVersions` maps only stages with a non-null configured model to actual model versions (no invented entries). All upstream runs must be done with persistence receipts; place is the current running run. Only subject-retrack can reuse a prior same-session, same-config completed moment. `placedBy` must be ai and `candidate` must equal the place run's actual candidate or null. Check adds its own verified run/worker/model. Neutral `Remark {n}` uses one-based ordering of **all session remarks by atMs ascending, then remarkId lexicographically by code units**; the runner must use that same ordering. Role labels are Batter/Bowler/Player from the selected role. Spans belong to this remark's immutable turns, use UTF-16 word boundaries and at most 60 code units, and are byte-compared after copying.
+
+Preview persists only validated supplied RenderOutput metadata, with actual measured duration and owned annotation references. RenderOutput stays frozen. Final render persistence currently fails closed: until finalize binds a frozen approved snapshot/input, output metadata cannot prove that an opaque video excludes unapproved marks. Cost ledger writes, nextFocus and agent trace persistence remain separate work. See `L2_PERSISTENCE_HANDOFF.md` for integration and evidence.
 
 ---
 
@@ -713,7 +880,9 @@ S1, decided by Bala 28 Oct (relayed via Chief of Staff): **Cloudflare R2**, a pr
 // apps/web/lib/storage/types.ts
 export interface VideoStorage {
   driver: "r2" | "local";
-  initMultipart(key: string, contentType: string): Promise<{ uploadId: string }>;
+  initMultipart(key: string, contentType: string, reservedId?: string): Promise<{ uploadId: string }>;
+  // Local-only authoritative inspection; R2 remains UNTESTED/unavailable.
+  inspectPart?(key: string, uploadId: string, partNumber: number): Promise<{ bytes: number; etag: string }>;
   signPartUrls(key: string, uploadId: string, partNumbers: number[], ttlS: number): Promise<{ partNumber: number; url: string; expiresAt: number }[]>;
   completeMultipart(key: string, uploadId: string, parts: { partNumber: number; etag: string }[]): Promise<void>;
   abortMultipart(key: string, uploadId: string): Promise<void>;
@@ -723,7 +892,7 @@ export interface VideoStorage {
   delete(keyOrPrefix: string): Promise<void>;
 }
 ```
-Key layout: `sessions/{sessionId}/source/{uploadId}`, `.../proxy.mp4`, `.../audio/{n}.wav`, `.../audio.m4a`, `.../keyframes/{idx}.jpg`, `.../keyframes.json`, `.../windows/{remarkId}.mp4`, `.../tracks/{remarkId}.json`, `.../masks/{remarkId}.bin`, `.../renders/{kind}/{segmentId}.mp4`, `.../renders/{kind}/full.mp4`, `.../stills/{annotationId}.jpg`.
+Key layout: local source `sessions/{sessionId}/source/original` (§10.2 reservation); planned R2 source `sessions/{sessionId}/source/{uploadId}` (UNTESTED), `.../proxy.mp4`, `.../audio/{n}.wav`, `.../audio.m4a`, `.../keyframes/{idx}.jpg`, `.../keyframes.json`, `.../windows/{remarkId}.mp4`, `.../tracks/{remarkId}.json`, `.../masks/{remarkId}.bin`, `.../renders/{kind}/{segmentId}-{hash}.mp4`, `.../renders/{kind}/full.mp4`, `.../stills/{annotationId}.jpg`. Render segment keys include the annotation-content hash so an older segment reference cannot alias bytes overwritten by a later edit. FileRef consumers also accept validated, canonical immutable run-artifact keys inside the same session.
 
 - **R2 adapter**: AWS SDK v3 S3 client, `endpoint = R2_ENDPOINT`, `region = "auto"`. Bucket private; CORS allows `PUT` from `APP_BASE_URL` and exposes `ETag`. Part size 8 MiB (5–10 MB guidance). Signed GETs use `ResponseContentDisposition: inline`.
 - **Local adapter**: files under `LOCAL_STORAGE_DIR` (`/data/netsense` on the VM); multipart parts as `key.parts/{n}`; signed URLs are `/api/media/local/{key}?exp=..&sig=HMAC(MEDIA_URL_SIGNING_SECRET, method|key|exp)`; GET supports `Range` for video seeking.
@@ -966,6 +1135,250 @@ These make the shorthand above executable; they do not mark IC1 deployed or merg
 - Consent confirmation is session-scoped. `sessions.confirmConsent({sessionId})` is a public owner-only mutation with no client-supplied timestamp or user-id arguments. Its first authorized call atomically writes `consentConfirmedAt = Date.now()` and `consentConfirmedBy = identity.subject`, where `identity.subject` is the authenticated Clerk user ID stored on `coaches.clerkUserId`. Repeated or concurrent calls preserve those first values. Sessions created before confirmation have neither optional field and are unconfirmed. This M1 record has no unconfirm operation and does not create a `consents` table or per-person records.
 - Rollup uses the job's pinned config and the latest attempt per stage/remark. `progress` is completed planned slots / planned slots; `progressLabel` is completed / planned for the first unfinished coach row. Subject anchor is one session-level `subject` run, plus one `subject` run per tracked remark. `no`/`general` remarks add no fan-out slots. Fan-out becomes known after plan, so the denominator can grow. `done`, `skipped`, `fallback`, and `needs_coach` settle a slot; `failed` remains unfinished for retry. Usage accumulates once per finished attempt, including failed paid attempts. Foundation supports pipeline and subject-retrack rollup; action-specific retry/finalize entry points remain later work.
 
-**Approved exception: selection frames before the tap (Bala, 28 Oct 2026).** When a phone cannot decode the clip, screen 07a's “Pick after upload” may request limited server-side extraction of selection frames from the completed upload. This step extracts selection frames only: no audio/transcription, subject anchoring, tracking, marks or analysis pipeline runs before the coach confirms a tap. The existing analysis job gate still requires both upload completion and the selected subject. Only the selected person is subsequently followed. Consent, authenticated ownership and upload validation still apply. The selection-frame fallback remains unimplemented and **UNTESTED** until T1.35's integration and acceptance tests pass.
+**Approved exception: selection frames before the tap (Bala, 28 Oct 2026).** When a phone cannot decode the clip, screen 07a's “Pick after upload” may request limited server-side extraction of selection frames from the completed upload. This step extracts selection frames only: no audio/transcription, subject anchoring, tracking, marks or analysis pipeline runs before the coach confirms a tap. The existing analysis job gate still requires both upload completion and the selected subject. Only the selected person is subsequently followed. Consent, authenticated ownership and upload validation still apply. The local-only selection-frame fallback is implemented with real-tool/transaction harness tests; live Clerk/Convex browser behavior remains **UNTESTED**. T1.35 remains partial for later review/retrack entry points.
 
 **Approved: retrack prerequisites after anchor failure (Bala, 28 Oct 2026).** After the coach confirms a new tap, a `subject_retrack` job reuses completed transcode, transcription, plan and per-remark moment outputs. Once the new subject anchor succeeds, it computes only missing per-remark moments before the subject → track → place → check branch. Existing completed moments are not recomputed; there is no full pipeline restart and no fabricated prerequisite output. This resolves the §6.5 reuse shorthand when the initial pipeline stopped before moments existed. T1.09 implementation and acceptance tests remain pending/UNTESTED.
+
+Persistence boundary clarification (T1.10): moments and clip times use half-open intervals `[startMs,endMs)`; selection/subject keyframes must precede the exclusive endpoint. Track persistence uses `by_trackId` for cross-session collision checks and `by_sessionId` for replacements; it never scans all sessions.
+
+### Local runtime integration boundary (T1.09 / T1.11, PARTIAL)
+
+The executable development/test path is `pnpm orchestrator` (`python -m
+netsense_orch`), explicitly gated by `NETSENSE_LOCAL_FAKE=1`, `NETSENSE_ENV` in
+`test|development`, and `SANDBOX_DRIVER=local`. It claims through the documented
+service HTTP API, passes only a job token and allowlisted safe runtime settings to
+`python -m netsense_runner --job <jobId>`, registers its sandbox, then opens a
+private startup gate. No model stage starts before registration succeeds. The
+worker reads the pinned job/config through `/worker/job`; only explicitly pinned
+synthetic model workers and the actual local transcode/check/render IDs are
+accepted. Fixtures must be explicitly selected from `fixtures/synthetic/dag`.
+No normal app/default config loads them and no production or paid provider is
+substituted. A no-paid ledger rejects every nonzero spend reservation.
+
+Storage signing uses bounded `POST /api/worker/sign` with the existing `{ops}`
+wire. Media GET/PUT uses owned subprocess transports with total deadlines,
+streamed byte limits, expiry checks, no redirects/proxies, and fixed errors. The
+shared trusted local filesystem is an explicit development capability:
+`NETSENSE_ARTIFACT_ROOT` must equal the VM's local object root. Immutable run JSON,
+receipts, tracks and synthetic crops use complete temporary files, fsync and
+atomic hard-link publication; identical replay is allowed, changed bytes reject.
+Cached render segments use the same atomic boundary with streamed comparison.
+Mutable full preview/JPEG/proxy/audio/keyframes use existing signed HTTP PUT.
+Check-then-PUT is never an immutable-write guarantee. Canonical session keys and
+no-follow directory/file descriptors constrain owned writes. This is trusted
+same-user local execution, not an OS security sandbox; only a local filesystem is
+supported (network-filesystem blocking/durability semantics are UNTESTED).
+
+Two backwards-compatible private service wire extensions protect local ownership:
+`POST /svc/jobs/sandbox` accepts optional `leaseOwner` and `expectedAttempt` and
+atomically rejects mismatches before registration. `POST /svc/jobs/fail` accepts
+these same optional guards and optional `staleOnly`; mismatched guards are a
+no-op. `staleOnly=true` rechecks lease expiry OR the server-configured heartbeat
+staleness inside the mutation, so a stale query snapshot cannot fail a refreshed
+lease. The executable local client always supplies both ownership guards; older
+trusted service callers retain their existing behavior. No public stage schema
+changes, new paid ledger, or automatic requeue are introduced.
+
+One independent local guardian owns a direct, unreaped command-group leader.
+It enforces its immutable startup lifetime and monitors owner socket EOF without
+owner polling. The guardian sends TERM then final KILL before reaping the group
+leader; it retries cleanup failures while retaining ownership and a shared
+cross-process name flock. Only confirmed cleanup publishes a durable release
+receipt. Startup/periodic reconciliation delivers the exact immutable release
+tuple through `/svc/jobs/released`, including after HTTP response loss. Persisted
+PIDs are never signalled. All cooperating local orchestrators must share
+`NETSENSE_LOCAL_STATE_DIR`; multiple hosts, hostile escaping commands, machine
+power loss, or external destruction of the guardian/state directory are outside
+this development guarantee. Unknown/no-receipt rows stay unreleased for diagnosis.
+
+Recovery remains PARTIAL: incomplete attempts and prior budget counters are not
+projected. Therefore this host accepts only first claims, durably admits a job
+once in its runner scratch directory, fails stale jobs with atomic ownership
+checks, and never automatically requeues. Keep admission/state/scratch durable
+across orchestrator restarts. The existing completed-output reuse and new-tap
+missing-moment policy in the DAG remain unchanged; a new subject-retrack job can
+read prior completed immutable artifacts. Paid recovery, stage retries,
+remark-retrack, finalize approval snapshots, and live Modal/Convex/R2 behavior
+remain PARTIAL / UNTESTED.
+
+### Local runtime corrective boundaries (PR20)
+
+The private authenticated `POST /svc/jobs/control` accepts exactly
+`{jobId, leaseOwner, expectedAttempt}` and returns exactly `{decision}`. Its closed
+values are `continue`, `stopped`, `terminal`, `superseded`, `missing`. A single
+mutation checks the current job, owner/attempt, status, lease and heartbeat.
+`continue` means the owned worker must remain alive; `stopped` means that exact
+running attempt was atomically failed with `INFRA_EXEC` before termination.
+`terminal`, `superseded` and `missing` authorize releasing only the caller's live
+owned handle, without mutating a successor. A missing/invalid/unavailable response
+never authorizes stale termination; the independent guardian lifetime remains.
+Existing `/svc/jobs/fail` and other `OkResponse` consumers retain exactly `{ok:true}`.
+Every observed runner exit, including zero without `/worker/done`, still calls
+guarded failure using the immutable original claim tuple. Owner mismatch refuses
+acquisition before any start or failure mutation.
+
+Local watch and runner heartbeat use `HEARTBEAT_S` (default 15, range 1–60 s;
+runner also requires less than the pinned lease). Queue polling uses
+`ORCH_POLL_INTERVAL_MS` (default 2000, range 100–60000 ms), reconciliation uses
+`SWEEPER_INTERVAL_S` (default 180, range 1–86400 s). Values must be finite. Owned
+process waits remain bounded at 0.2 s; authenticated control calls run only at the
+watch interval, with a five-second HTTP deadline. Sweeps also run during long
+jobs. There is no global stale-list failure policy in this local runtime: startup
+reconciliation may fail only an exact journaled claim after confirmed local death.
+Known live owned workers observe external terminal/cancel/supersede through fresh
+control transactions, even though those jobs disappear from the stale list.
+
+Reconciliation serializes each shared state directory with a cross-process flock;
+journal writes use unique atomic temporary files. Environment and service origin,
+canonical UUID/filename, local driver and matching job/name constrain receipt
+reconciliation. Journal reads are bounded, regular-file and no-follow. Corrupt or
+foreign journals stay pending and cannot prevent other deliveries. Unscoped older
+journals need diagnosis; they do not authorize cross-environment recovery. Release
+response loss retries the same immutable receipt tuple. No persisted PID is used.
+
+The trusted scoped local artifact boundary answers cached-object existence using
+regular-file metadata, without first requesting a signed GET for a missing file.
+Other I/O/auth/outage errors propagate. Cache bytes still traverse actual signing
+and media GET for validation. Unchanged segments are reused. A completely
+downloaded segment that fails validation can be quarantined only if its current
+inode/size/modification identity matches the observed file, under a directory
+flock. Quarantined corrupt derived media remains local for diagnosis; rebuilding
+uses normal atomic immutable publication. JSON artifacts are never quarantined or
+overwritten. JSON reads/writes cap at 1 MiB, reject nonregular/symlink replay targets,
+and share the caller's actual stage deadline. Media segments remain streamed with
+the separate 2 GiB transport cap. Expired budgets reject without a positive clamp.
+The executable local host rejects a declared source above 2 GiB before stage/media
+work. Both Next upload admission and private `uploads.reserve` reject above
+2 GiB before storage/media work (§10.2). This cap is specific to the executable
+local implementation; larger-file support is unsupported / UNTESTED.
+
+Automatic requeue remains disabled; incomplete attempts and prior-budget recovery
+remain partial. T1.09/T1.11 and full browser E2E/vendor behavior remain partial /
+UNTESTED as stated above.
+
+### Playback/review local integration clarification (T1.23 / T1.24)
+
+`playback.get({sessionId})` is an authenticated owner-only projection. It joins
+original transcript turns in the persisted remark order with exactly one space,
+separate optional coach corrections, marks without private provenance, exact
+current-subject track bindings, current-job preview references, and completed
+owned transcode artifact reference plus persistence receipt hash. A track must
+match annotation/remark/role and a completed track run's persisted binding; a
+subject-retrack cannot reuse the previous subject's bindings. No provider/model,
+worker token, trace, contact or full configuration is projected. Suggestions are
+read from actual owned lesson focus/practice rows; their editing/dismissal remains
+screen 21's lane. No synthetic fallback is loaded by these routes.
+
+The local `POST /api/media/sign` accepts exactly `{sessionId,asset}`. Supported
+assets are `proxy`, `audio`, current `preview`, `still:{annotationId}` and
+`track:{remarkId}`. Final media stays unavailable until approved snapshots and
+finalize are connected. Ownership and the closed selector are checked before
+storage. Source proxy/audio keys and measured dimensions/duration come from the
+actual completed TranscodeOutput artifact, validated against the generated
+contract and SHA-256 persistence receipt of canonical `{output}`. Only canonical
+same-session keys explicitly referenced by that output/current rows are signed;
+a session-prefix match alone never grants access. No arbitrary URL or write asset
+is accepted. Local GET TTL is `SIGNED_URL_TTL_SECONDS` (default 600, 1–3600).
+The response includes `{url,expiresAt,width,height,durationMs}`. A track response
+also includes `{trackId,track}` after full TrackFile schema and renderer semantic
+validation (1 MiB cap). Track URLs are GET-only and expire identically. R2 is
+unimplemented and UNTESTED. Responses are no-store and fixed errors disclose no
+raw output, URL, token or storage path.
+
+The signing route bounds request bodies to 4 KiB, Convex response bodies and JSON
+artifact/track reads to 1 MiB, each request to ten seconds, and concurrent requests
+and outstanding auth operations to four. Local asset reads use the existing
+no-follow regular-file boundary. Browser signing reads have a twelve-second
+header/body deadline and 1 MiB cap, reject redirects/foreign session URLs, and
+abort on session/login/navigation changes. Player signing queues are sequential
+per asset kind. Existing single-web-process local storage assumptions apply.
+
+Preview validity is conservative: latest owned job, ready preview, anchored
+current subject, and no newer annotation update. Review timestamps strictly
+exceed existing render timestamps even in the same millisecond. Any deletion,
+undo, approval or edit invalidates the mutable baked preview immediately. Missing,
+stale, failed or undecodable preview uses the real proxy plus live canvas; the
+canvas is absent over a baked preview. Still mode always retains its banner and
+never draws a tracked overlay on video. Current persisted stills are shown; edits
+that invalidate them leave a safe unavailable state until a new render exists.
+Native proxy pixels, half-up rounding, half-open boxes/windows and nearest safe
+observations follow `overlay_draw.py` and `s8_render.py`, including gap and
+first-swap suppression. Browser/Pillow text rasterization and live device visual
+parity remain UNTESTED.
+
+`review.approve/edit/move/delete/undoDelete` each accept exactly one annotation ID
+and authorize it transactionally. `edit` takes generated mark/anchor/arrow/span/
+neutral enums and optional per-remark `mode`; labels are copied in code from
+immutable original turns using the existing UTF-16 span and word-boundary rules,
+or the existing role/one-based Remark label. Placement changes set `placedBy` to
+coach while preserving original `aiPlacement` and provenance; saves become
+unapproved drafts. Changing the per-remark mode also clears approval on every
+non-deleted sibling mark; each still requires its own approval. Label-source
+changes clear the previous optional span/neutral field before validation.
+Delete/undo do not resurrect approval. `correctTurn` updates
+only separate correction fields, displayed as “corrected by coach”; Hear coach
+always uses the original audio and original turn spans. Audio endpoints follow
+the media clock; buffering pauses endpoint timers rather than skipping unheard
+speech. Active jobs block mark
+changes. Missing/foreign/stale subject bindings and failed checks cannot approve
+tracked marks; note-only is a safe alternative.
+
+Retimed drafts never inherit the original checker verdict. The local authenticated
+`POST /api/review/approve` accepts exactly
+`{annotationId,expectedUpdatedAt,expectedRevision}` (32 KiB request cap). The
+revision is the playback projection's opaque revision string for the scope the
+coach saw; it includes subject, current job/config version, remark mode/moment,
+track/source binding, and annotation revisions. `review.edit` optionally accepts
+both expected fields for backwards compatibility and returns `{updatedAt,revision}`
+for the saved draft. The UI captures the editor's revision when opened, rather
+than silently adopting concurrent query changes; Save and approve verifies the
+returned saved revision. A failed verification leaves that saved draft retryable.
+
+The Next handler obtains a single owned `review.approvalInput` with the coach's
+Convex token. This returns only the required time/mode/keyframe inputs, pinned
+`minMarkCoverage`, current canonical track/source references, source receipt hash,
+authoritative coach owner, and a SHA-256 state digest, never full config/models or
+secrets. The handler reads actual TrackFile bytes through the same bounded,
+no-follow local regular-file reader and schema/semantic validator as coach media.
+It checks source TranscodeOutput against its canonical persistence receipt and
+measured dimensions/duration. Frame observations are subject-only, distinct,
+half-open, and excluded when declared in a gap; coverage uses the checker formula
+`min(observed,ceil(duration*fps/1000))/ceil(duration*fps/1000)` (one expected
+observation for fps zero). A swap before the exclusive range end rejects, including
+an earlier swap before the new start: renderers suppress the track from its first
+swap onward, and retiming alone cannot restore subject identity. Still mode additionally
+requires the actual selected keyframe observation; note-only reads no overlay
+track. Whole-track summary coverage cannot authorize or veto a verified new
+range. Role, integer bounds, moment limits, generated mark enums, pinned allowlist
+and verbatim label checks remain authoritative in Convex. Original aiPlacement,
+coach words and provenance are unchanged.
+
+Only after validation does Next call private `POST /svc/review/approve`, using
+`CONVEX_SERVICE_SECRET` and exactly
+`{annotationId,coachId,state,expectedUpdatedAt,expiresAt}`. Owner comes from the
+authenticated query, never a browser owner assertion. The internal transaction
+reconstructs and compares the digest of complete current annotation, remark,
+session/subject, latest job, track/run/job/receipt, source run/receipt, and pinned
+config documents. It reruns authoritative validation and checks the ten-second
+request expiry before approving exactly one annotation. Any edit, deletion,
+retap, mode/moment/job/config/reference/receipt change rejects without approval
+mutation; no public pass/coverage assertion can enter this route. A consumed draft
+revision fails closed on replay; a fresh exact already-approved revision is a
+read-only retry. Cancellation before commit leaves a draft; lost commit responses
+are resolved by rereading current status, never by applying an old proof to a new
+revision. The route uses a ten-second total deadline, four concurrency/auth slots,
+1 MiB Convex response and local JSON limits, no redirects/logging, fixed no-store
+errors and local immutable worker-artifact publication assumptions. R2 and live
+Clerk/Convex behavior remain UNTESTED.
+
+Screen 20 and the inline editor offer bounded start/end drag controls, ±0.5-second
+range shifts, precise numeric times and the actual unmarked proxy with bounded
+seeking. The original AI range remains separately labelled from the solid coach
+range. The saved original aiPlacement label span remains selectable after a
+neutral-label switch; immutable original words are copied and validated again.
+`FEATURE_REVIEW_MODE=full` remains the default; `simple` hides tabs, transcription,
+mode and mark/label/anchor changes, retaining individual approve/delete and
+retiming. T1.24's local verification/approval gap is connected; required live
+browser/device acceptance remains UNTESTED and no `pnpm e2e` exists yet.
+Notes/share/student/finalize and per-remark recovery execution remain separate
+lanes. No working-looking links or actions point to their missing routes.

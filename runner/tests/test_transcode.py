@@ -45,11 +45,8 @@ class Storage:
 
 
 class Api:
-    def persist_stage_output(self, stage_run_id: str, output_ref: str) -> None:
-        raise AssertionError("stage persistence belongs to the DAG")
-
-    def report_stage_usage(self, stage_run_id: str, cost_usd: float) -> None:
-        raise AssertionError("stage usage persistence belongs to the DAG")
+    def heartbeat(self) -> None:
+        raise AssertionError("liveness belongs to the DAG")
 
 
 class Log:

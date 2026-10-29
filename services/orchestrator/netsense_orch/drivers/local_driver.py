@@ -1,13 +1,14 @@
 """Local subprocess sandbox driver with process-group cleanup.
 
-This is deliberately a narrow local-development and test transport. It does not
-persist PIDs, scan process tables, watch heartbeats, or recover after an
-orchestrator crash. Those production lifecycle/sweeper responsibilities remain
-UNTESTED and pending the T1.11 integration work.
+Local development only. An independent guardian owns command-group signalling.
+Durable receipts and cross-process name locks support safe restart reconciliation;
+no persisted PID is ever used for signalling.
 """
 
 from __future__ import annotations
 
+import fcntl
+import hashlib
 import json
 import math
 import os
@@ -59,6 +60,7 @@ class LocalSandboxSpec:
     cwd: Path
     env: Mapping[str, str] = field(default_factory=dict)
     timeout_s: float = 1.0
+    state_dir: Path | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name.strip():
@@ -101,8 +103,20 @@ class _LocalSandboxHandle:
         self._result: int | None = None
         self._ready = False
         self._startup_errno: int | None = None
+        self._name_file: int | None = None
+        root = spec.state_dir or spec.cwd / ".orca-scratch/local-sandboxes"
+        root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.receipt = root / (self._sandbox_id + ".released.json")
+        self._lock_path = root / (hashlib.sha256(spec.name.encode()).hexdigest() + ".lock")
 
     def start(self) -> None:
+        self._name_file = os.open(self._lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            fcntl.flock(self._name_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            os.close(self._name_file)
+            self._name_file = None
+            raise LocalSandboxNameInUseError("local sandbox name is already in use") from None
         channel, child_channel = socket.socketpair()
         self._channel = channel
         try:
@@ -120,7 +134,7 @@ class _LocalSandboxHandle:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
-                pass_fds=(child_channel.fileno(),),
+                pass_fds=(child_channel.fileno(), self._name_file),
             )
         finally:
             child_channel.close()
@@ -135,6 +149,10 @@ class _LocalSandboxHandle:
                     {
                         "command": self._spec.command,
                         "env": dict(self._spec.env),
+                        "deadline": self._deadline,
+                        "receipt": str(self.receipt.resolve()),
+                        "id": self.sandbox_id,
+                        "lockFd": self._name_file,
                     }
                 ).encode()
                 + b"\n"
@@ -188,6 +206,11 @@ class _LocalSandboxHandle:
         caller_deadline = None if caller_limit is None else time.monotonic() + caller_limit
         while True:
             result = self.poll()
+            if self.receipt.exists():
+                receipt = json.loads(self.receipt.read_text())
+                if receipt["terminatedBy"] == "timeout":
+                    self.terminate()
+                    raise LocalSandboxTimeoutError("local sandbox lifetime elapsed")
             if result is not None:
                 return result
             now = time.monotonic()
@@ -209,21 +232,23 @@ class _LocalSandboxHandle:
             process = self._process
             if process is not None:
                 if not self._signals_done:
-                    # Never poll/wait/reap the leader before the FINAL group signal.
                     try:
-                        # Before READY the helper may not have installed its TERM
-                        # handler yet. Go straight to the final KILL in that case.
-                        if self._ready:
-                            self._signal_group(signal.SIGTERM)
-                            time.sleep(_TERMINATE_GRACE_S)
-                        self._signal_group(signal.SIGKILL)
+                        if self._channel is not None:
+                            self._channel.settimeout(0.2)
+                            try:
+                                self._channel.sendall(b"stop\n")
+                            except (BrokenPipeError, ConnectionResetError):
+                                pass
                         self._signals_done = True
                     except OSError as exc:
-                        raise LocalSandboxCleanupError("local sandbox signal unconfirmed") from exc
+                        raise LocalSandboxCleanupError("local sandbox stop unconfirmed") from exc
                 try:
-                    process.wait(timeout=_REAP_WAIT_S)
+                    process.wait(timeout=4)
                 except (subprocess.TimeoutExpired, OSError) as exc:
                     raise LocalSandboxCleanupError("local sandbox reap unconfirmed") from exc
+                # No PID signalling here: only the guardian owns the command group.
+                if self._ready and not self.receipt.exists():
+                    raise LocalSandboxCleanupError("local sandbox receipt missing")
                 if self._channel is not None:
                     self._channel.setblocking(False)
                 self.poll()
@@ -231,28 +256,21 @@ class _LocalSandboxHandle:
                     self._result = -signal.SIGKILL
             if self._channel is not None:
                 self._channel.close()
+            if self._name_file is not None:
+                os.close(self._name_file)
+                self._name_file = None
             self._closed = True
             with LocalDriver._names_lock:
                 if LocalDriver._cleanup_pending.get(self.name) is self:
                     LocalDriver._cleanup_pending.pop(self.name)
                     LocalDriver._reserved_names.discard(self.name)
 
-    def _signal_group(self, sig: signal.Signals) -> None:
-        assert self._process is not None
-        try:
-            os.killpg(self._process.pid, sig)
-        except ProcessLookupError:
-            # The unreaped leader still pins its PID. No unrelated group can
-            # acquire this identity before our final signal and subsequent reap.
-            return
-
 
 class LocalDriver:
-    """Context-managed local subprocesses with process-local name exclusion.
+    """Context-managed local subprocesses with cross-process name locks.
 
-    Name protection is intentionally in-memory and only covers concurrent calls
-    in this orchestrator process. Cross-process protection and restart/orphan
-    recovery require the production lifecycle plus sweeper and are still pending.
+    All owners must use the same private state_dir on one local filesystem.
+    Cleanup failures retain their handle/name for a later retry.
     """
 
     _cleanup_pending: Final[dict[str, _LocalSandboxHandle]] = {}

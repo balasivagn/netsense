@@ -17,13 +17,16 @@
     "convex:codegen": "node scripts/convex-codegen.mjs",
     "convex:check": "node scripts/convex-codegen.mjs --check",
     "contracts:lint": "tsx scripts/lint-model-schemas.ts",
-    "contracts:test-drift": "tsx scripts/test-contract-drift.ts"
+    "contracts:test-drift": "tsx scripts/test-contract-drift.ts",
+    "orchestrator": "uv run --project services/orchestrator python -m netsense_orch"
   },
   "dependencies": {
     "convex": "1.48.0"
   },
   "devDependencies": {
     "@edge-runtime/vm": "5.0.0",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
     "@eslint/js": "10.0.1",
     "@types/node": "26.6.5",
     "ajv": "8.20.0",
@@ -31,6 +34,7 @@
     "convex-test": "0.0.65",
     "eslint": "10.13.0",
     "json-schema-to-typescript": "16.0.0",
+    "jsdom": "28.1.0",
     "prettier": "3.9.10",
     "tsx": "4.23.15",
     "typescript": "6.0.3",

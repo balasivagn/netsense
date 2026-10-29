@@ -1821,6 +1821,10 @@
             },
             "trackFileRef": {
               "type": "string"
+            },
+            "keyframeMs": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "required": [
@@ -1832,7 +1836,8 @@
             "endMs",
             "labelText",
             "placedBy",
-            "trackFileRef"
+            "trackFileRef",
+            "keyframeMs"
           ],
           "additionalProperties": false
         }

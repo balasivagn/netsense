@@ -52,12 +52,17 @@ export default defineSchema({
     subjectAnchor: v.optional(
       v.object({ box: box, frameMs: v.number(), referenceCropKey: v.string() }),
     ),
-    captureMode: v.union(
-      v.literal("camera"),
-      v.literal("camera_roll"),
-      v.literal("in_page"),
+    captureMode: v.optional(
+      v.union(
+        v.literal("camera"),
+        v.literal("camera_roll"),
+        v.literal("in_page"),
+      ),
     ),
     renderMode: renderMode,
+    uploadFailures: v.optional(v.number()),
+    uploadAttempt: v.optional(v.number()),
+    uploadAttemptActive: v.optional(v.boolean()),
     consentConfirmedAt: v.optional(v.number()),
     consentConfirmedBy: v.optional(v.string()),
     isDemoFallback: v.boolean(),
@@ -85,6 +90,16 @@ export default defineSchema({
     bytesConfirmed: v.number(),
     partSize: v.number(),
     partsConfirmed: v.array(v.number()),
+    confirmedParts: v.optional(
+      v.array(
+        v.object({
+          partNumber: v.number(),
+          etag: v.string(),
+          bytes: v.number(),
+        }),
+      ),
+    ),
+    phase: v.optional(v.union(v.literal("completing"), v.literal("aborting"))),
     sha256: v.string(),
     status: v.union(
       v.literal("in_progress"),
@@ -233,6 +248,15 @@ export default defineSchema({
     errorCode: v.optional(errorCode),
     errorDetail: v.optional(v.string()),
     inputHash: v.string(),
+    persistedOutputHash: v.optional(v.string()),
+    persistedTrackBinding: v.optional(
+      v.object({ trackId: v.string(), fileRef: v.string() }),
+    ),
+    persistedAnnotationIds: v.optional(
+      v.array(
+        v.object({ markId: v.string(), annotationId: v.id("annotations") }),
+      ),
+    ),
     outputRef: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     endedAt: v.optional(v.number()),
@@ -360,7 +384,8 @@ export default defineSchema({
     cacheKey: v.string(),
   })
     .index("by_sessionId", ["sessionId"])
-    .index("by_cacheKey", ["cacheKey"]),
+    .index("by_cacheKey", ["cacheKey"])
+    .index("by_trackId", ["trackId"]),
   agentTraces: defineTable({
     coachId: v.id("coaches"),
     stageRunId: v.id("stageRuns"),

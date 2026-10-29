@@ -34,6 +34,7 @@ class Annotation(ContractModel):
     labelText: str
     placedBy: Literal["ai", "coach"]
     trackFileRef: str
+    keyframeMs: Annotated[int, Field(ge=0)]
 
 
 class PreviousSegment(ContractModel):
