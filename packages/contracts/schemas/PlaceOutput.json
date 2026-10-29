@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "PlaceOutput.json",
+  "title": "PlaceOutput",
+  "type": "object",
+  "properties": {
+    "remarkId": {
+      "type": "string"
+    },
+    "marks": {
+      "type": "array",
+      "items": {
+        "$ref": "Common.json#/$defs/Mark"
+      },
+      "minItems": 1,
+      "maxItems": 3
+    },
+    "why": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "remarkId",
+    "marks",
+    "why"
+  ],
+  "additionalProperties": false
+}

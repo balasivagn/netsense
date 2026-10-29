@@ -1,0 +1,33 @@
+{
+  "valid": {
+    "remarkId": "synthetic",
+    "startMs": 0,
+    "endMs": 0,
+    "keyframeMs": 0,
+    "keyframeIdx": 0,
+    "candidates": [
+      {
+        "startMs": 0,
+        "endMs": 0
+      }
+    ],
+    "why": "synthetic",
+    "confidence": "high"
+  },
+  "invalid": {
+    "remarkId": "synthetic",
+    "startMs": 0,
+    "endMs": 0,
+    "keyframeMs": 0,
+    "keyframeIdx": 0,
+    "candidates": [
+      {
+        "startMs": 0,
+        "endMs": 0
+      }
+    ],
+    "why": "synthetic",
+    "confidence": "high",
+    "unexpected": true
+  }
+}

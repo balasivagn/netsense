@@ -1,0 +1,17 @@
+{
+  "valid": {
+    "uploadId": "synthetic",
+    "sourceKey": "synthetic",
+    "declaredBytes": 0,
+    "declaredSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "mimeType": "synthetic"
+  },
+  "invalid": {
+    "uploadId": "synthetic",
+    "sourceKey": "synthetic",
+    "declaredBytes": 0,
+    "declaredSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "mimeType": "synthetic",
+    "unexpected": true
+  }
+}

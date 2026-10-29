@@ -1,0 +1,45 @@
+{
+  "valid": {
+    "remarkId": "synthetic",
+    "mode": "video",
+    "proxyKey": "synthetic",
+    "windowStartMs": 0,
+    "windowEndMs": 0,
+    "promptFrameMs": 0,
+    "promptBox": {
+      "x1": 0,
+      "y1": 0,
+      "x2": 0,
+      "y2": 0
+    },
+    "promptPoint": {
+      "x": 0,
+      "y": 0
+    },
+    "role": "batter",
+    "downsampleFps": 1,
+    "proxySha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "invalid": {
+    "remarkId": "synthetic",
+    "mode": "video",
+    "proxyKey": "synthetic",
+    "windowStartMs": 0,
+    "windowEndMs": 0,
+    "promptFrameMs": 0,
+    "promptBox": {
+      "x1": 0,
+      "y1": 0,
+      "x2": 0,
+      "y2": 0
+    },
+    "promptPoint": {
+      "x": 0,
+      "y": 0
+    },
+    "role": "batter",
+    "downsampleFps": 1,
+    "proxySha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "unexpected": true
+  }
+}

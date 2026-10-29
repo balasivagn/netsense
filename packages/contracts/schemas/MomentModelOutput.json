@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "MomentModelOutput.json",
+  "title": "MomentModelOutput",
+  "type": "object",
+  "properties": {
+    "startIdx": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "endIdx": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "keyIdx": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "alternates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startIdx": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "endIdx": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "startIdx",
+          "endIdx"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 2
+    },
+    "why": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    }
+  },
+  "required": [
+    "startIdx",
+    "endIdx",
+    "keyIdx",
+    "alternates",
+    "why",
+    "confidence"
+  ],
+  "additionalProperties": false
+}

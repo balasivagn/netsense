@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: gitleaks staged secrets
+        entry: scripts/gitleaks.sh git --pre-commit --redact --staged
+        language: system
+        pass_filenames: false

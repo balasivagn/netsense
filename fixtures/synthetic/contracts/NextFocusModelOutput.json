@@ -1,0 +1,17 @@
+{
+  "valid": {
+    "title": "synthetic",
+    "why": "synthetic",
+    "remarkIds": [
+      "synthetic"
+    ]
+  },
+  "invalid": {
+    "title": "synthetic",
+    "why": "synthetic",
+    "remarkIds": [
+      "synthetic"
+    ],
+    "unexpected": true
+  }
+}

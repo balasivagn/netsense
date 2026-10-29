@@ -1,0 +1,32 @@
+name: Foundation checks
+on:
+  push:
+    branches: [main, 'lane/**']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.9.21'
+      - uses: pnpm/action-setup@v4
+      - run: uv python install 3.12
+      - run: scripts/install-gitleaks.sh
+      - run: pnpm install --frozen-lockfile
+      - run: uv sync --project runner --locked
+      - run: uv sync --project services/orchestrator --locked
+      - run: pnpm check
+      - run: pnpm test:contracts
+      - run: pnpm contracts:test-drift
+      - run: pnpm --filter @netsense/web build
+      - run: scripts/secret-scan.sh
+      - run: uv tool run --from pre-commit==4.7.0 pre-commit run --all-files

@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "TrackInput.json",
+  "title": "TrackInput",
+  "type": "object",
+  "properties": {
+    "remarkId": {
+      "type": "string"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "video",
+        "still"
+      ]
+    },
+    "proxyKey": {
+      "type": "string"
+    },
+    "windowStartMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "windowEndMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "promptFrameMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "promptBox": {
+      "$ref": "Common.json#/$defs/Box"
+    },
+    "promptPoint": {
+      "anyOf": [
+        {
+          "$ref": "Common.json#/$defs/Point"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "role": {
+      "$ref": "Common.json#/$defs/SubjectRole"
+    },
+    "downsampleFps": {
+      "anyOf": [
+        {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "proxySha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "required": [
+    "remarkId",
+    "mode",
+    "proxyKey",
+    "windowStartMs",
+    "windowEndMs",
+    "promptFrameMs",
+    "promptBox",
+    "promptPoint",
+    "role",
+    "downsampleFps",
+    "proxySha256"
+  ],
+  "additionalProperties": false
+}

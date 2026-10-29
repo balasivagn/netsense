@@ -1,0 +1,33 @@
+{
+  "valid": {
+    "session": {
+      "studentLabel": "synthetic",
+      "subjectRole": "batter"
+    },
+    "turns": [
+      {
+        "turnId": "synthetic",
+        "startMs": 0,
+        "endMs": 0,
+        "speaker": "synthetic",
+        "text": "synthetic"
+      }
+    ]
+  },
+  "invalid": {
+    "session": {
+      "studentLabel": "synthetic",
+      "subjectRole": "batter"
+    },
+    "turns": [
+      {
+        "turnId": "synthetic",
+        "startMs": 0,
+        "endMs": 0,
+        "speaker": "synthetic",
+        "text": "synthetic"
+      }
+    ],
+    "unexpected": true
+  }
+}

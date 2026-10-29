@@ -1,0 +1,29 @@
+{
+  "valid": {
+    "startIdx": 0,
+    "endIdx": 0,
+    "keyIdx": 0,
+    "alternates": [
+      {
+        "startIdx": 0,
+        "endIdx": 0
+      }
+    ],
+    "why": "synthetic",
+    "confidence": "high"
+  },
+  "invalid": {
+    "startIdx": 0,
+    "endIdx": 0,
+    "keyIdx": 0,
+    "alternates": [
+      {
+        "startIdx": 0,
+        "endIdx": 0
+      }
+    ],
+    "why": "synthetic",
+    "confidence": "high",
+    "unexpected": true
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "TrackOutput.json",
+  "title": "TrackOutput",
+  "type": "object",
+  "properties": {
+    "remarkId": {
+      "type": "string"
+    },
+    "trackId": {
+      "type": "string"
+    },
+    "role": {
+      "$ref": "Common.json#/$defs/SubjectRole"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "video",
+        "still"
+      ]
+    },
+    "fileRef": {
+      "type": "string"
+    },
+    "maskRef": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "coverage": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "framesBilled": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "cacheHit": {
+      "type": "boolean"
+    },
+    "swapSuspected": {
+      "type": "boolean"
+    },
+    "reassociations": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "remarkId",
+    "trackId",
+    "role",
+    "mode",
+    "fileRef",
+    "maskRef",
+    "coverage",
+    "framesBilled",
+    "cacheHit",
+    "swapSuspected",
+    "reassociations"
+  ],
+  "additionalProperties": false
+}

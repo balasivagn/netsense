@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "SubjectInput.json",
+  "title": "SubjectInput",
+  "type": "object",
+  "properties": {
+    "remarkId": {
+      "type": "string"
+    },
+    "coachWords": {
+      "type": "string"
+    },
+    "subjectRole": {
+      "$ref": "Common.json#/$defs/SubjectRole"
+    },
+    "referenceCropKey": {
+      "type": "string"
+    },
+    "anchorBox": {
+      "$ref": "Common.json#/$defs/Box"
+    },
+    "anchorFrameMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "keyframeKey": {
+      "type": "string"
+    },
+    "keyframeMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "pointPrompt": {
+      "anyOf": [
+        {
+          "$ref": "Common.json#/$defs/Point"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "remarkId",
+    "coachWords",
+    "subjectRole",
+    "referenceCropKey",
+    "anchorBox",
+    "anchorFrameMs",
+    "keyframeKey",
+    "keyframeMs",
+    "pointPrompt"
+  ],
+  "additionalProperties": false
+}

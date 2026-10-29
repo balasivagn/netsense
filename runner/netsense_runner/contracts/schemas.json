@@ -1,0 +1,2801 @@
+{
+  "CheckInput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "CheckInput.json",
+    "title": "CheckInput",
+    "type": "object",
+    "properties": {
+      "remarkId": {
+        "type": "string"
+      },
+      "marks": {
+        "type": "array",
+        "items": {
+          "$ref": "Common.json#/$defs/Mark"
+        }
+      },
+      "trackFileRef": {
+        "type": "string"
+      },
+      "transcriptTurns": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "turnId": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "turnId",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "momentStartMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "momentEndMs": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "remarkId",
+      "marks",
+      "trackFileRef",
+      "transcriptTurns",
+      "momentStartMs",
+      "momentEndMs"
+    ],
+    "additionalProperties": false
+  },
+  "CheckOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "CheckOutput.json",
+    "title": "CheckOutput",
+    "type": "object",
+    "properties": {
+      "remarkId": {
+        "type": "string"
+      },
+      "verdicts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "markId": {
+              "type": "string"
+            },
+            "pass": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "ok",
+                "no_player",
+                "subject_swap",
+                "low_coverage",
+                "outside_moment",
+                "label_mismatch",
+                "label_too_long"
+              ]
+            }
+          },
+          "required": [
+            "markId",
+            "pass",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "remarkStatus": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "player_missing"
+        ]
+      }
+    },
+    "required": [
+      "remarkId",
+      "verdicts",
+      "remarkStatus"
+    ],
+    "additionalProperties": false
+  },
+  "Common.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "Common.json",
+    "title": "Common",
+    "$defs": {
+      "SubjectRole": {
+        "type": "string",
+        "enum": [
+          "batter",
+          "bowler",
+          "other"
+        ]
+      },
+      "Subject": {
+        "type": "object",
+        "properties": {
+          "frameMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "point": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "batter",
+              "bowler",
+              "other"
+            ]
+          },
+          "selectedBy": {
+            "type": "string",
+            "enum": [
+              "coach"
+            ]
+          },
+          "selectedAt": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "frameMs",
+          "point",
+          "role",
+          "selectedBy",
+          "selectedAt"
+        ],
+        "additionalProperties": false
+      },
+      "Point": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "y": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "additionalProperties": false
+      },
+      "Box": {
+        "type": "object",
+        "properties": {
+          "x1": {
+            "type": "number",
+            "minimum": 0
+          },
+          "y1": {
+            "type": "number",
+            "minimum": 0
+          },
+          "x2": {
+            "type": "number",
+            "minimum": 0
+          },
+          "y2": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "x1",
+          "y1",
+          "x2",
+          "y2"
+        ],
+        "additionalProperties": false
+      },
+      "TextSpan": {
+        "type": "object",
+        "properties": {
+          "turnId": {
+            "type": "string"
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "turnId",
+          "start",
+          "end"
+        ],
+        "additionalProperties": false,
+        "description": "UTF-16 code unit offsets into immutable transcriptTurns.text. Code checks boundaries, start < end, and verbatim copy; models return spans only."
+      },
+      "MarkType": {
+        "type": "string",
+        "enum": [
+          "circle",
+          "arrow",
+          "highlight",
+          "label"
+        ]
+      },
+      "Anchor": {
+        "type": "string",
+        "enum": [
+          "box_center",
+          "box_top",
+          "box_bottom",
+          "box_left",
+          "box_right"
+        ]
+      },
+      "ArrowFrom": {
+        "type": "string",
+        "enum": [
+          "left",
+          "right",
+          "above",
+          "below"
+        ]
+      },
+      "NeutralLabel": {
+        "type": "string",
+        "enum": [
+          "Batter",
+          "Bowler",
+          "Player",
+          "Remark"
+        ]
+      },
+      "Provenance": {
+        "type": "object",
+        "properties": {
+          "configVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "stageRunIds": {
+            "type": "object",
+            "patternProperties": {
+              "^(moment|subject|track|place|check)$": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "workers": {
+            "type": "object",
+            "patternProperties": {
+              "^(moment|subject|track|place|check)$": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "modelVersions": {
+            "type": "object",
+            "patternProperties": {
+              "^[A-Za-z0-9_.@-]+$": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "placedBy": {
+            "type": "string",
+            "enum": [
+              "ai",
+              "coach"
+            ]
+          },
+          "candidate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "configVersion",
+          "stageRunIds",
+          "workers",
+          "modelVersions",
+          "placedBy",
+          "candidate"
+        ],
+        "additionalProperties": false
+      },
+      "StageKey": {
+        "type": "string",
+        "enum": [
+          "transcode",
+          "transcribe",
+          "plan",
+          "moment",
+          "subject",
+          "track",
+          "place",
+          "check",
+          "render"
+        ]
+      },
+      "WorkerType": {
+        "type": "string",
+        "enum": [
+          "agent",
+          "sub_agent",
+          "model",
+          "tool",
+          "rules"
+        ]
+      },
+      "Provider": {
+        "type": "string",
+        "enum": [
+          "local",
+          "meta",
+          "fake",
+          "gemini",
+          "fireworks",
+          "baseten"
+        ]
+      },
+      "Turn": {
+        "type": "object",
+        "properties": {
+          "turnId": {
+            "type": "string"
+          },
+          "startMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "endMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "speaker": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "turnId",
+          "startMs",
+          "endMs",
+          "speaker",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "Frame": {
+        "type": "object",
+        "properties": {
+          "idx": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "idx",
+          "ms",
+          "key"
+        ],
+        "additionalProperties": false
+      },
+      "AudioChunk": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "offsetMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "durationMs": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "key",
+          "offsetMs",
+          "durationMs"
+        ],
+        "additionalProperties": false
+      },
+      "Mark": {
+        "type": "object",
+        "properties": {
+          "markId": {
+            "type": "string"
+          },
+          "markType": {
+            "$ref": "Common.json#/$defs/MarkType"
+          },
+          "anchor": {
+            "$ref": "Common.json#/$defs/Anchor"
+          },
+          "arrowFrom": {
+            "anyOf": [
+              {
+                "$ref": "Common.json#/$defs/ArrowFrom"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "endMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "labelSpan": {
+            "anyOf": [
+              {
+                "$ref": "Common.json#/$defs/TextSpan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "labelText": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "neutralLabel": {
+            "anyOf": [
+              {
+                "$ref": "Common.json#/$defs/NeutralLabel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "markId",
+          "markType",
+          "anchor",
+          "arrowFrom",
+          "startMs",
+          "endMs",
+          "labelSpan",
+          "labelText",
+          "neutralLabel"
+        ],
+        "additionalProperties": false
+      },
+      "Draft": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          },
+          "remarkIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "ai_draft"
+            ]
+          },
+          "approved": {
+            "const": false,
+            "type": "boolean"
+          },
+          "editedByCoach": {
+            "const": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "why",
+          "remarkIds",
+          "source",
+          "approved",
+          "editedByCoach"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "type": "object",
+    "properties": {},
+    "required": [],
+    "additionalProperties": false
+  },
+  "CriticModelOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "CriticModelOutput.json",
+    "title": "CriticModelOutput",
+    "type": "object",
+    "properties": {
+      "pass": {
+        "type": "boolean"
+      },
+      "reason": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "pass",
+      "reason"
+    ],
+    "additionalProperties": false
+  },
+  "ErrorCode.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "ErrorCode.json",
+    "title": "ErrorCode",
+    "type": "string",
+    "enum": [
+      "UPLOAD_PART_FAILED",
+      "UPLOAD_CHECKSUM",
+      "UPLOAD_SIZE_MISMATCH",
+      "VIDEO_DECODE",
+      "AUDIO_DECODE",
+      "TRANSCRIBE_FAILED",
+      "NO_SPEECH",
+      "PLAN_FAILED",
+      "MOMENT_FAILED",
+      "SUBJECT_NEEDED",
+      "SUBJECT_NOT_FOUND",
+      "SUBJECT_SWAP",
+      "SEG_NO_TRACK",
+      "SEG_BAD_INPUT",
+      "RENDER_FAIL",
+      "BUDGET_SAM_FRAMES",
+      "BUDGET_TOKENS",
+      "BUDGET_DAILY",
+      "STAGE_TIMEOUT",
+      "SANDBOX_LOST",
+      "INFRA_CREATE",
+      "INFRA_EXEC",
+      "INFRA_NETWORK",
+      "VERBATIM_MISMATCH",
+      "CONTRACT_INVALID",
+      "LINK_WRONG_CODE",
+      "LINK_LOCKED",
+      "LINK_STOPPED"
+    ]
+  },
+  "MomentInput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "MomentInput.json",
+    "title": "MomentInput",
+    "type": "object",
+    "properties": {
+      "remarkId": {
+        "type": "string"
+      },
+      "coachWords": {
+        "type": "string"
+      },
+      "atMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "subjectRole": {
+        "$ref": "Common.json#/$defs/SubjectRole"
+      },
+      "frames": {
+        "type": "array",
+        "items": {
+          "$ref": "Common.json#/$defs/Frame"
+        },
+        "maxItems": 26
+      },
+      "previousRemarkAtMs": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "remarkId",
+      "coachWords",
+      "atMs",
+      "subjectRole",
+      "frames",
+      "previousRemarkAtMs"
+    ],
+    "additionalProperties": false
+  },
+  "MomentModelOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "MomentModelOutput.json",
+    "title": "MomentModelOutput",
+    "type": "object",
+    "properties": {
+      "startIdx": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "endIdx": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "keyIdx": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "alternates": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "startIdx": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "endIdx": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "startIdx",
+            "endIdx"
+          ],
+          "additionalProperties": false
+        },
+        "maxItems": 2
+      },
+      "why": {
+        "type": "string"
+      },
+      "confidence": {
+        "type": "string",
+        "enum": [
+          "high",
+          "medium",
+          "low"
+        ]
+      }
+    },
+    "required": [
+      "startIdx",
+      "endIdx",
+      "keyIdx",
+      "alternates",
+      "why",
+      "confidence"
+    ],
+    "additionalProperties": false
+  },
+  "MomentOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "MomentOutput.json",
+    "title": "MomentOutput",
+    "type": "object",
+    "properties": {
+      "remarkId": {
+        "type": "string"
+      },
+      "startMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "endMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "keyframeMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "keyframeIdx": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "candidates": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "startMs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "endMs": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "startMs",
+            "endMs"
+          ],
+          "additionalProperties": false
+        },
+        "maxItems": 2
+      },
+      "why": {
+        "type": "string"
+      },
+      "confidence": {
+        "type": "string",
+        "enum": [
+          "high",
+          "medium",
+          "low"
+        ]
+      }
+    },
+    "required": [
+      "remarkId",
+      "startMs",
+      "endMs",
+      "keyframeMs",
+      "keyframeIdx",
+      "candidates",
+      "why",
+      "confidence"
+    ],
+    "additionalProperties": false
+  },
+  "NextFocusModelOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "NextFocusModelOutput.json",
+    "title": "NextFocusModelOutput",
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string"
+      },
+      "why": {
+        "type": "string"
+      },
+      "remarkIds": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "title",
+      "why",
+      "remarkIds"
+    ],
+    "additionalProperties": false
+  },
+  "PipelineConfig.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "PipelineConfig.json",
+    "title": "PipelineConfig",
+    "type": "object",
+    "properties": {
+      "version": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "note": {
+        "type": "string"
+      },
+      "stages": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "stage": {
+              "$ref": "Common.json#/$defs/StageKey"
+            },
+            "coachLabel": {
+              "type": "string"
+            },
+            "workerId": {
+              "type": "string"
+            },
+            "workerType": {
+              "$ref": "Common.json#/$defs/WorkerType"
+            },
+            "provider": {
+              "$ref": "Common.json#/$defs/Provider"
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fanOut": {
+              "type": "string",
+              "enum": [
+                "none",
+                "per_remark"
+              ]
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "retry": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "fallbackWorker": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "candidates": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "critic": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "workerId": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "$ref": "Common.json#/$defs/Provider"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "workerId",
+                    "provider",
+                    "model",
+                    "enabled"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "stage",
+            "coachLabel",
+            "workerId",
+            "workerType",
+            "provider",
+            "model",
+            "fanOut",
+            "timeoutMs",
+            "retry",
+            "fallbackWorker",
+            "candidates",
+            "enabled",
+            "critic"
+          ],
+          "additionalProperties": false
+        },
+        "minItems": 9,
+        "maxItems": 9
+      },
+      "coachStages": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "minItems": 1
+      },
+      "params": {
+        "type": "object",
+        "properties": {
+          "personConcept": {
+            "type": "string"
+          },
+          "minPersonConfidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "maxMomentMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "momentLookbackMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "keyframeFps": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "trackPadMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "downsampleFps": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "minMarkCoverage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "stillsThreshold": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "allowedMarkTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "Common.json#/$defs/MarkType"
+            }
+          },
+          "maxMarksPerRemark": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "labelMaxChars": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "renderModeDefault": {
+            "type": "string",
+            "enum": [
+              "video",
+              "stills"
+            ]
+          },
+          "otherPersonRemarksInShare": {
+            "type": "boolean"
+          },
+          "anchorReuseMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reassocIouMin": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "swapIouMin": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "swapJumpFrac": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "maxSubjectCandidates": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "subjectModel": {
+            "type": "string"
+          },
+          "segmentationModel": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "personConcept",
+          "minPersonConfidence",
+          "maxMomentMs",
+          "momentLookbackMs",
+          "keyframeFps",
+          "trackPadMs",
+          "downsampleFps",
+          "minMarkCoverage",
+          "stillsThreshold",
+          "allowedMarkTypes",
+          "maxMarksPerRemark",
+          "labelMaxChars",
+          "renderModeDefault",
+          "otherPersonRemarksInShare",
+          "anchorReuseMs",
+          "reassocIouMin",
+          "swapIouMin",
+          "swapJumpFrac",
+          "maxSubjectCandidates",
+          "subjectModel",
+          "segmentationModel"
+        ],
+        "additionalProperties": false
+      },
+      "limits": {
+        "type": "object",
+        "properties": {
+          "jobSamFrameCap": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "jobSparkTokenCap": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "fanoutConcurrency": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "dailySpendLimitUsd": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "sandboxTimeoutCapS": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "sandboxIdleTimeoutS": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "jobMaxAttempts": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "maxVideoMinutes": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          },
+          "jobLeaseS": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": [
+          "jobSamFrameCap",
+          "jobSparkTokenCap",
+          "fanoutConcurrency",
+          "dailySpendLimitUsd",
+          "sandboxTimeoutCapS",
+          "sandboxIdleTimeoutS",
+          "jobMaxAttempts",
+          "maxVideoMinutes",
+          "jobLeaseS"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "version",
+      "note",
+      "stages",
+      "coachStages",
+      "params",
+      "limits"
+    ],
+    "additionalProperties": false
+  },
+  "PlaceInput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "PlaceInput.json",
+    "title": "PlaceInput",
+    "type": "object",
+    "properties": {
+      "remarkId": {
+        "type": "string"
+      },
+      "coachWords": {
+        "type": "string"
+      },
+      "turnSpans": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "turnId": {
+              "type": "string"
+            },
+            "length": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "turnId",
+            "length"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "role": {
+        "$ref": "Common.json#/$defs/SubjectRole"
+      },
+      "momentStartMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "momentEndMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "keyframeMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "boxAtKeyframe": {
+        "$ref": "Common.json#/$defs/Box"
+      },
+      "coverage": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "allowedMarkTypes": {
+        "type": "array",
+        "items": {
+          "$ref": "Common.json#/$defs/MarkType"
+        },
+        "minItems": 1,
+        "uniqueItems": true
+      },
+      "remarkNumber": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "required": [
+      "remarkId",
+      "coachWords",
+      "turnSpans",
+      "role",
+      "momentStartMs",
+      "momentEndMs",
+      "keyframeMs",
+      "boxAtKeyframe",
+      "coverage",
+      "allowedMarkTypes",
+      "remarkNumber"
+    ],
+    "additionalProperties": false
+  },
+  "PlaceModelOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "PlaceModelOutput.json",
+    "title": "PlaceModelOutput",
+    "type": "object",
+    "properties": {
+      "marks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "markType": {
+              "$ref": "Common.json#/$defs/MarkType"
+            },
+            "anchor": {
+              "$ref": "Common.json#/$defs/Anchor"
+            },
+            "arrowFrom": {
+              "type": "string",
+              "enum": [
+                "left",
+                "right",
+                "above",
+                "below",
+                "none"
+              ]
+            },
+            "startOffsetMs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "endOffsetMs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "label": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "coach_span",
+                    "neutral"
+                  ]
+                },
+                "span": {
+                  "type": "object",
+                  "properties": {
+                    "turnId": {
+                      "type": "string"
+                    },
+                    "start": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "end": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "turnId",
+                    "start",
+                    "end"
+                  ],
+                  "additionalProperties": false
+                },
+                "neutral": {
+                  "type": "string",
+                  "enum": [
+                    "Batter",
+                    "Bowler",
+                    "Player",
+                    "Remark",
+                    "none"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "span",
+                "neutral"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "markType",
+            "anchor",
+            "arrowFrom",
+            "startOffsetMs",
+            "endOffsetMs",
+            "label"
+          ],
+          "additionalProperties": false
+        },
+        "minItems": 1,
+        "maxItems": 3
+      },
+      "why": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "marks",
+      "why"
+    ],
+    "additionalProperties": false
+  },
+  "PlaceOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "PlaceOutput.json",
+    "title": "PlaceOutput",
+    "type": "object",
+    "properties": {
+      "remarkId": {
+        "type": "string"
+      },
+      "marks": {
+        "type": "array",
+        "items": {
+          "$ref": "Common.json#/$defs/Mark"
+        },
+        "minItems": 1,
+        "maxItems": 3
+      },
+      "why": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "remarkId",
+      "marks",
+      "why"
+    ],
+    "additionalProperties": false
+  },
+  "PlanInput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "PlanInput.json",
+    "title": "PlanInput",
+    "type": "object",
+    "properties": {
+      "session": {
+        "type": "object",
+        "properties": {
+          "studentLabel": {
+            "type": "string"
+          },
+          "subjectRole": {
+            "$ref": "Common.json#/$defs/SubjectRole"
+          }
+        },
+        "required": [
+          "studentLabel",
+          "subjectRole"
+        ],
+        "additionalProperties": false
+      },
+      "turns": {
+        "type": "array",
+        "items": {
+          "$ref": "Common.json#/$defs/Turn"
+        }
+      }
+    },
+    "required": [
+      "session",
+      "turns"
+    ],
+    "additionalProperties": false
+  },
+  "PlanModelOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "PlanModelOutput.json",
+    "title": "PlanModelOutput",
+    "type": "object",
+    "properties": {
+      "coachSpeaker": {
+        "type": "string"
+      },
+      "remarks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "turnIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            },
+            "aboutSubject": {
+              "type": "string",
+              "enum": [
+                "yes",
+                "no",
+                "unclear",
+                "general"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "feedback",
+                "instruction",
+                "praise",
+                "other"
+              ]
+            },
+            "aboutHint": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "turnIds",
+            "aboutSubject",
+            "kind",
+            "aboutHint"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "focusDrafts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "why": {
+              "type": "string"
+            },
+            "remarkIndexes": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "required": [
+            "title",
+            "why",
+            "remarkIndexes"
+          ],
+          "additionalProperties": false
+        },
+        "maxItems": 2
+      },
+      "practiceDrafts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "why": {
+              "type": "string"
+            },
+            "remarkIndexes": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "required": [
+            "title",
+            "why",
+            "remarkIndexes"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "noteDraft": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "why": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "why"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "coachSpeaker",
+      "remarks",
+      "focusDrafts",
+      "practiceDrafts",
+      "noteDraft"
+    ],
+    "additionalProperties": false
+  },
+  "PlanOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "PlanOutput.json",
+    "title": "PlanOutput",
+    "type": "object",
+    "properties": {
+      "remarks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "remarkId": {
+              "type": "string"
+            },
+            "turnIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            },
+            "aboutSubject": {
+              "type": "string",
+              "enum": [
+                "yes",
+                "no",
+                "unclear",
+                "general"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "feedback",
+                "instruction",
+                "praise",
+                "other"
+              ]
+            },
+            "aboutHint": {
+              "type": "string"
+            },
+            "atMs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "coachWords": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "remarkId",
+            "turnIds",
+            "aboutSubject",
+            "kind",
+            "aboutHint",
+            "atMs",
+            "coachWords"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "fanOut": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "remarkId": {
+              "type": "string"
+            },
+            "stages": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "moment",
+                  "subject",
+                  "track",
+                  "place",
+                  "check"
+                ]
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "remarkId",
+            "stages"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "drafts": {
+        "type": "object",
+        "properties": {
+          "focus": {
+            "type": "array",
+            "items": {
+              "$ref": "Common.json#/$defs/Draft"
+            },
+            "maxItems": 2
+          },
+          "practice": {
+            "type": "array",
+            "items": {
+              "$ref": "Common.json#/$defs/Draft"
+            }
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "why": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "ai_draft"
+                    ]
+                  },
+                  "approved": {
+                    "type": "boolean",
+                    "const": false
+                  }
+                },
+                "required": [
+                  "text",
+                  "why",
+                  "source",
+                  "approved"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "focus",
+          "practice",
+          "note"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "remarks",
+      "fanOut",
+      "drafts"
+    ],
+    "additionalProperties": false
+  },
+  "Provenance.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "Provenance.json",
+    "title": "Provenance",
+    "$ref": "Common.json#/$defs/Provenance"
+  },
+  "RenderInput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "RenderInput.json",
+    "title": "RenderInput",
+    "type": "object",
+    "properties": {
+      "kind": {
+        "type": "string",
+        "enum": [
+          "preview",
+          "final"
+        ]
+      },
+      "mode": {
+        "type": "string",
+        "enum": [
+          "video",
+          "stills"
+        ]
+      },
+      "proxyKey": {
+        "type": "string"
+      },
+      "durationMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "segments": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "segmentId": {
+              "type": "string"
+            },
+            "startMs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "endMs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "annotationIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "hash": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "segmentId",
+            "startMs",
+            "endMs",
+            "annotationIds",
+            "hash"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "annotations": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "annotationId": {
+              "type": "string"
+            },
+            "markType": {
+              "$ref": "Common.json#/$defs/MarkType"
+            },
+            "anchor": {
+              "$ref": "Common.json#/$defs/Anchor"
+            },
+            "arrowFrom": {
+              "anyOf": [
+                {
+                  "$ref": "Common.json#/$defs/ArrowFrom"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "startMs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "endMs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "labelText": {
+              "type": "string"
+            },
+            "placedBy": {
+              "type": "string",
+              "enum": [
+                "ai",
+                "coach"
+              ]
+            },
+            "trackFileRef": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "annotationId",
+            "markType",
+            "anchor",
+            "arrowFrom",
+            "startMs",
+            "endMs",
+            "labelText",
+            "placedBy",
+            "trackFileRef"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "previousSegments": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "segmentId": {
+              "type": "string"
+            },
+            "hash": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "segmentId",
+            "hash",
+            "key"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "kind",
+      "mode",
+      "proxyKey",
+      "durationMs",
+      "segments",
+      "annotations",
+      "previousSegments"
+    ],
+    "additionalProperties": false
+  },
+  "RenderOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "RenderOutput.json",
+    "title": "RenderOutput",
+    "type": "object",
+    "properties": {
+      "kind": {
+        "type": "string",
+        "enum": [
+          "preview",
+          "final"
+        ]
+      },
+      "mode": {
+        "type": "string",
+        "enum": [
+          "video",
+          "stills"
+        ]
+      },
+      "fileRef": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "stillRefs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "annotationId": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "annotationId",
+            "key"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "segmentRefs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "segmentId": {
+              "type": "string"
+            },
+            "hash": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "segmentId",
+            "hash",
+            "key"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "durationMs": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "kind",
+      "mode",
+      "fileRef",
+      "stillRefs",
+      "segmentRefs",
+      "durationMs"
+    ],
+    "additionalProperties": false
+  },
+  "StageRun.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "StageRun.json",
+    "title": "StageRun",
+    "type": "object",
+    "properties": {
+      "jobId": {
+        "type": "string"
+      },
+      "sessionId": {
+        "type": "string"
+      },
+      "stage": {
+        "$ref": "Common.json#/$defs/StageKey"
+      },
+      "remarkId": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "workerId": {
+        "type": "string"
+      },
+      "workerType": {
+        "$ref": "Common.json#/$defs/WorkerType"
+      },
+      "provider": {
+        "$ref": "Common.json#/$defs/Provider"
+      },
+      "modelVersion": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "promptHash": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "candidate": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "attempt": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "idempotencyKey": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "running",
+          "done",
+          "failed",
+          "skipped",
+          "fallback",
+          "needs_coach"
+        ]
+      },
+      "errorCode": {
+        "anyOf": [
+          {
+            "$ref": "ErrorCode.json"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "errorDetail": {
+        "anyOf": [
+          {
+            "type": "string",
+            "maxLength": 500
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "inputHash": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "outputRef": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "startedAt": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "endedAt": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "latencyMs": {
+        "anyOf": [
+          {
+            "type": "number",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "samFrames": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "inputTokens": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "outputTokens": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "costUsd": {
+        "anyOf": [
+          {
+            "type": "number",
+            "minimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "jobId",
+      "sessionId",
+      "stage",
+      "remarkId",
+      "workerId",
+      "workerType",
+      "provider",
+      "modelVersion",
+      "promptHash",
+      "candidate",
+      "attempt",
+      "idempotencyKey",
+      "status",
+      "errorCode",
+      "errorDetail",
+      "inputHash",
+      "outputRef",
+      "startedAt",
+      "endedAt",
+      "latencyMs",
+      "samFrames",
+      "inputTokens",
+      "outputTokens",
+      "costUsd"
+    ],
+    "additionalProperties": false
+  },
+  "Subject.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "Subject.json",
+    "title": "Subject",
+    "$ref": "Common.json#/$defs/Subject"
+  },
+  "SubjectAnchorInput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "SubjectAnchorInput.json",
+    "title": "SubjectAnchorInput",
+    "type": "object",
+    "properties": {
+      "proxyKey": {
+        "type": "string"
+      },
+      "subject": {
+        "$ref": "Common.json#/$defs/Subject"
+      }
+    },
+    "required": [
+      "proxyKey",
+      "subject"
+    ],
+    "additionalProperties": false
+  },
+  "SubjectAnchorOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "SubjectAnchorOutput.json",
+    "title": "SubjectAnchorOutput",
+    "type": "object",
+    "properties": {
+      "anchorBox": {
+        "$ref": "Common.json#/$defs/Box"
+      },
+      "anchorFrameMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "referenceCropKey": {
+        "type": "string"
+      },
+      "confidence": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "required": [
+      "anchorBox",
+      "anchorFrameMs",
+      "referenceCropKey",
+      "confidence"
+    ],
+    "additionalProperties": false
+  },
+  "SubjectInput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "SubjectInput.json",
+    "title": "SubjectInput",
+    "type": "object",
+    "properties": {
+      "remarkId": {
+        "type": "string"
+      },
+      "coachWords": {
+        "type": "string"
+      },
+      "subjectRole": {
+        "$ref": "Common.json#/$defs/SubjectRole"
+      },
+      "referenceCropKey": {
+        "type": "string"
+      },
+      "anchorBox": {
+        "$ref": "Common.json#/$defs/Box"
+      },
+      "anchorFrameMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "keyframeKey": {
+        "type": "string"
+      },
+      "keyframeMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "pointPrompt": {
+        "anyOf": [
+          {
+            "$ref": "Common.json#/$defs/Point"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "remarkId",
+      "coachWords",
+      "subjectRole",
+      "referenceCropKey",
+      "anchorBox",
+      "anchorFrameMs",
+      "keyframeKey",
+      "keyframeMs",
+      "pointPrompt"
+    ],
+    "additionalProperties": false
+  },
+  "SubjectModelOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "SubjectModelOutput.json",
+    "title": "SubjectModelOutput",
+    "type": "object",
+    "properties": {
+      "boxNumber": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 6
+      },
+      "why": {
+        "type": "string"
+      },
+      "confidence": {
+        "type": "string",
+        "enum": [
+          "high",
+          "medium",
+          "low"
+        ]
+      }
+    },
+    "required": [
+      "boxNumber",
+      "why",
+      "confidence"
+    ],
+    "additionalProperties": false
+  },
+  "SubjectOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "SubjectOutput.json",
+    "title": "SubjectOutput",
+    "type": "object",
+    "properties": {
+      "remarkId": {
+        "type": "string"
+      },
+      "target": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "$ref": "Common.json#/$defs/SubjectRole"
+          },
+          "promptBox": {
+            "$ref": "Common.json#/$defs/Box"
+          },
+          "promptPoint": {
+            "anyOf": [
+              {
+                "$ref": "Common.json#/$defs/Point"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "frameMs": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "role",
+          "promptBox",
+          "promptPoint",
+          "frameMs"
+        ],
+        "additionalProperties": false
+      },
+      "method": {
+        "type": "string",
+        "enum": [
+          "anchor_reuse",
+          "reid_model",
+          "coach_tap"
+        ]
+      },
+      "why": {
+        "type": "string"
+      },
+      "confidence": {
+        "type": "string",
+        "enum": [
+          "high",
+          "medium",
+          "low"
+        ]
+      },
+      "candidatesCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 6
+      }
+    },
+    "required": [
+      "remarkId",
+      "target",
+      "method",
+      "why",
+      "confidence",
+      "candidatesCount"
+    ],
+    "additionalProperties": false
+  },
+  "SubjectRole.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "SubjectRole.json",
+    "title": "SubjectRole",
+    "$ref": "Common.json#/$defs/SubjectRole"
+  },
+  "TrackFile.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "TrackFile.json",
+    "title": "TrackFile",
+    "type": "object",
+    "properties": {
+      "fps": {
+        "type": "number",
+        "minimum": 0
+      },
+      "subjectOnly": {
+        "const": true,
+        "type": "boolean"
+      },
+      "frames": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "ms": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "box": {
+              "$ref": "Common.json#/$defs/Box"
+            },
+            "conf": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "required": [
+            "ms",
+            "box",
+            "conf"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "gaps": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "minItems": 2,
+          "maxItems": 2
+        }
+      },
+      "swaps": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "ms": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "jump",
+                "reassociated"
+              ]
+            }
+          },
+          "required": [
+            "ms",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "fps",
+      "subjectOnly",
+      "frames",
+      "gaps",
+      "swaps"
+    ],
+    "additionalProperties": false
+  },
+  "TrackInput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "TrackInput.json",
+    "title": "TrackInput",
+    "type": "object",
+    "properties": {
+      "remarkId": {
+        "type": "string"
+      },
+      "mode": {
+        "type": "string",
+        "enum": [
+          "video",
+          "still"
+        ]
+      },
+      "proxyKey": {
+        "type": "string"
+      },
+      "windowStartMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "windowEndMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "promptFrameMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "promptBox": {
+        "$ref": "Common.json#/$defs/Box"
+      },
+      "promptPoint": {
+        "anyOf": [
+          {
+            "$ref": "Common.json#/$defs/Point"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "role": {
+        "$ref": "Common.json#/$defs/SubjectRole"
+      },
+      "downsampleFps": {
+        "anyOf": [
+          {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "proxySha256": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "required": [
+      "remarkId",
+      "mode",
+      "proxyKey",
+      "windowStartMs",
+      "windowEndMs",
+      "promptFrameMs",
+      "promptBox",
+      "promptPoint",
+      "role",
+      "downsampleFps",
+      "proxySha256"
+    ],
+    "additionalProperties": false
+  },
+  "TrackOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "TrackOutput.json",
+    "title": "TrackOutput",
+    "type": "object",
+    "properties": {
+      "remarkId": {
+        "type": "string"
+      },
+      "trackId": {
+        "type": "string"
+      },
+      "role": {
+        "$ref": "Common.json#/$defs/SubjectRole"
+      },
+      "mode": {
+        "type": "string",
+        "enum": [
+          "video",
+          "still"
+        ]
+      },
+      "fileRef": {
+        "type": "string"
+      },
+      "maskRef": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "coverage": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "framesBilled": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "cacheHit": {
+        "type": "boolean"
+      },
+      "swapSuspected": {
+        "type": "boolean"
+      },
+      "reassociations": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "remarkId",
+      "trackId",
+      "role",
+      "mode",
+      "fileRef",
+      "maskRef",
+      "coverage",
+      "framesBilled",
+      "cacheHit",
+      "swapSuspected",
+      "reassociations"
+    ],
+    "additionalProperties": false
+  },
+  "TranscodeInput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "TranscodeInput.json",
+    "title": "TranscodeInput",
+    "type": "object",
+    "properties": {
+      "uploadId": {
+        "type": "string"
+      },
+      "sourceKey": {
+        "type": "string"
+      },
+      "declaredBytes": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "declaredSha256": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "mimeType": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "uploadId",
+      "sourceKey",
+      "declaredBytes",
+      "declaredSha256",
+      "mimeType"
+    ],
+    "additionalProperties": false
+  },
+  "TranscodeOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "TranscodeOutput.json",
+    "title": "TranscodeOutput",
+    "type": "object",
+    "properties": {
+      "proxyKey": {
+        "type": "string"
+      },
+      "audioWavKeys": {
+        "type": "array",
+        "items": {
+          "$ref": "Common.json#/$defs/AudioChunk"
+        }
+      },
+      "audioM4aKey": {
+        "type": "string"
+      },
+      "durationMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "width": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "height": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "fps": {
+        "type": "number",
+        "exclusiveMinimum": 0
+      },
+      "frameCount": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "keyframeIndexKey": {
+        "type": "string"
+      },
+      "sha256Verified": {
+        "const": true,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "proxyKey",
+      "audioWavKeys",
+      "audioM4aKey",
+      "durationMs",
+      "width",
+      "height",
+      "fps",
+      "frameCount",
+      "keyframeIndexKey",
+      "sha256Verified"
+    ],
+    "additionalProperties": false
+  },
+  "TranscribeInput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "TranscribeInput.json",
+    "title": "TranscribeInput",
+    "type": "object",
+    "properties": {
+      "audioWavKeys": {
+        "type": "array",
+        "items": {
+          "$ref": "Common.json#/$defs/AudioChunk"
+        }
+      },
+      "keywords": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "languageBias": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "audioWavKeys",
+      "keywords",
+      "languageBias"
+    ],
+    "additionalProperties": false
+  },
+  "TranscribeOutput.json": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "TranscribeOutput.json",
+    "title": "TranscribeOutput",
+    "type": "object",
+    "properties": {
+      "turns": {
+        "type": "array",
+        "items": {
+          "$ref": "Common.json#/$defs/Turn"
+        }
+      },
+      "audioDurationMs": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "providerSessionIds": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "turns",
+      "audioDurationMs",
+      "providerSessionIds"
+    ],
+    "additionalProperties": false
+  }
+}

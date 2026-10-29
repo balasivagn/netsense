@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "SubjectOutput.json",
+  "title": "SubjectOutput",
+  "type": "object",
+  "properties": {
+    "remarkId": {
+      "type": "string"
+    },
+    "target": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "$ref": "Common.json#/$defs/SubjectRole"
+        },
+        "promptBox": {
+          "$ref": "Common.json#/$defs/Box"
+        },
+        "promptPoint": {
+          "anyOf": [
+            {
+              "$ref": "Common.json#/$defs/Point"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frameMs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "role",
+        "promptBox",
+        "promptPoint",
+        "frameMs"
+      ],
+      "additionalProperties": false
+    },
+    "method": {
+      "type": "string",
+      "enum": [
+        "anchor_reuse",
+        "reid_model",
+        "coach_tap"
+      ]
+    },
+    "why": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "candidatesCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 6
+    }
+  },
+  "required": [
+    "remarkId",
+    "target",
+    "method",
+    "why",
+    "confidence",
+    "candidatesCount"
+  ],
+  "additionalProperties": false
+}

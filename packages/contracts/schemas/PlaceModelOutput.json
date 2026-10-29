@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "PlaceModelOutput.json",
+  "title": "PlaceModelOutput",
+  "type": "object",
+  "properties": {
+    "marks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "markType": {
+            "$ref": "Common.json#/$defs/MarkType"
+          },
+          "anchor": {
+            "$ref": "Common.json#/$defs/Anchor"
+          },
+          "arrowFrom": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right",
+              "above",
+              "below",
+              "none"
+            ]
+          },
+          "startOffsetMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "endOffsetMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "label": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "coach_span",
+                  "neutral"
+                ]
+              },
+              "span": {
+                "type": "object",
+                "properties": {
+                  "turnId": {
+                    "type": "string"
+                  },
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "turnId",
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              },
+              "neutral": {
+                "type": "string",
+                "enum": [
+                  "Batter",
+                  "Bowler",
+                  "Player",
+                  "Remark",
+                  "none"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "span",
+              "neutral"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "markType",
+          "anchor",
+          "arrowFrom",
+          "startOffsetMs",
+          "endOffsetMs",
+          "label"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 3
+    },
+    "why": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "marks",
+    "why"
+  ],
+  "additionalProperties": false
+}

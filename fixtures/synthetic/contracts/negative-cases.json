@@ -1,0 +1,369 @@
+[
+  {
+    "schema": "Subject",
+    "label": "x below zero",
+    "value": {
+      "frameMs": 0,
+      "point": {
+        "x": -0.1,
+        "y": 0
+      },
+      "role": "batter",
+      "selectedBy": "coach",
+      "selectedAt": 0
+    }
+  },
+  {
+    "schema": "Subject",
+    "label": "y above one",
+    "value": {
+      "frameMs": 0,
+      "point": {
+        "x": 0,
+        "y": 1.1
+      },
+      "role": "batter",
+      "selectedBy": "coach",
+      "selectedAt": 0
+    }
+  },
+  {
+    "schema": "Subject",
+    "label": "negative frame",
+    "value": {
+      "frameMs": -1,
+      "point": {
+        "x": 0,
+        "y": 0
+      },
+      "role": "batter",
+      "selectedBy": "coach",
+      "selectedAt": 0
+    }
+  },
+  {
+    "schema": "Subject",
+    "label": "fractional frame",
+    "value": {
+      "frameMs": 0.5,
+      "point": {
+        "x": 0,
+        "y": 0
+      },
+      "role": "batter",
+      "selectedBy": "coach",
+      "selectedAt": 0
+    }
+  },
+  {
+    "schema": "Subject",
+    "label": "string frame",
+    "value": {
+      "frameMs": "100",
+      "point": {
+        "x": 0,
+        "y": 0
+      },
+      "role": "batter",
+      "selectedBy": "coach",
+      "selectedAt": 0
+    }
+  },
+  {
+    "schema": "Subject",
+    "label": "wrong role",
+    "value": {
+      "frameMs": 0,
+      "point": {
+        "x": 0,
+        "y": 0
+      },
+      "role": "all",
+      "selectedBy": "coach",
+      "selectedAt": 0
+    }
+  },
+  {
+    "schema": "Subject",
+    "label": "non-coach selection",
+    "value": {
+      "frameMs": 0,
+      "point": {
+        "x": 0,
+        "y": 0
+      },
+      "role": "batter",
+      "selectedBy": "model",
+      "selectedAt": 0
+    }
+  },
+  {
+    "schema": "SubjectModelOutput",
+    "label": "seventh candidate",
+    "value": {
+      "boxNumber": 7,
+      "why": "synthetic",
+      "confidence": "high"
+    }
+  },
+  {
+    "schema": "TrackFile",
+    "label": "multiple subjects",
+    "value": {
+      "fps": 0,
+      "subjectOnly": false,
+      "frames": [
+        {
+          "ms": 0,
+          "box": {
+            "x1": 0,
+            "y1": 0,
+            "x2": 0,
+            "y2": 0
+          },
+          "conf": 0
+        }
+      ],
+      "gaps": [
+        [
+          0,
+          0
+        ]
+      ],
+      "swaps": [
+        {
+          "ms": 0,
+          "reason": "jump"
+        }
+      ]
+    }
+  },
+  {
+    "schema": "TrackOutput",
+    "label": "coverage above one",
+    "value": {
+      "remarkId": "synthetic",
+      "trackId": "synthetic",
+      "role": "batter",
+      "mode": "video",
+      "fileRef": "synthetic",
+      "maskRef": "synthetic",
+      "coverage": 1.1,
+      "framesBilled": 0,
+      "cacheHit": false,
+      "swapSuspected": false,
+      "reassociations": 0
+    }
+  },
+  {
+    "schema": "PlaceModelOutput",
+    "label": "free coach label",
+    "value": {
+      "marks": [
+        {
+          "markType": "circle",
+          "anchor": "box_center",
+          "arrowFrom": "left",
+          "startOffsetMs": 0,
+          "endOffsetMs": 0,
+          "label": {
+            "kind": "coach_span",
+            "text": "invented"
+          }
+        }
+      ],
+      "why": "synthetic"
+    }
+  },
+  {
+    "schema": "PlaceModelOutput",
+    "label": "too many marks",
+    "value": {
+      "marks": [
+        {
+          "markType": "circle",
+          "anchor": "box_center",
+          "arrowFrom": "left",
+          "startOffsetMs": 0,
+          "endOffsetMs": 0,
+          "label": {
+            "kind": "coach_span",
+            "span": {
+              "turnId": "synthetic",
+              "start": 0,
+              "end": 0
+            },
+            "neutral": "Batter"
+          }
+        },
+        {
+          "markType": "circle",
+          "anchor": "box_center",
+          "arrowFrom": "left",
+          "startOffsetMs": 0,
+          "endOffsetMs": 0,
+          "label": {
+            "kind": "coach_span",
+            "span": {
+              "turnId": "synthetic",
+              "start": 0,
+              "end": 0
+            },
+            "neutral": "Batter"
+          }
+        },
+        {
+          "markType": "circle",
+          "anchor": "box_center",
+          "arrowFrom": "left",
+          "startOffsetMs": 0,
+          "endOffsetMs": 0,
+          "label": {
+            "kind": "coach_span",
+            "span": {
+              "turnId": "synthetic",
+              "start": 0,
+              "end": 0
+            },
+            "neutral": "Batter"
+          }
+        },
+        {
+          "markType": "circle",
+          "anchor": "box_center",
+          "arrowFrom": "left",
+          "startOffsetMs": 0,
+          "endOffsetMs": 0,
+          "label": {
+            "kind": "coach_span",
+            "span": {
+              "turnId": "synthetic",
+              "start": 0,
+              "end": 0
+            },
+            "neutral": "Batter"
+          }
+        }
+      ],
+      "why": "synthetic"
+    }
+  },
+  {
+    "schema": "PlaceOutput",
+    "label": "label too long",
+    "value": {
+      "remarkId": "synthetic",
+      "marks": [
+        {
+          "markId": "synthetic",
+          "markType": "circle",
+          "anchor": "box_center",
+          "arrowFrom": "left",
+          "startMs": 0,
+          "endMs": 0,
+          "labelSpan": {
+            "turnId": "synthetic",
+            "start": 0,
+            "end": 1
+          },
+          "labelText": "sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+          "neutralLabel": "Batter"
+        }
+      ],
+      "why": "synthetic"
+    }
+  },
+  {
+    "schema": "PlanModelOutput",
+    "label": "too many focus drafts",
+    "value": {
+      "coachSpeaker": "synthetic",
+      "remarks": [
+        {
+          "turnIds": [
+            "synthetic"
+          ],
+          "aboutSubject": "yes",
+          "kind": "feedback",
+          "aboutHint": "synthetic"
+        }
+      ],
+      "focusDrafts": [
+        {
+          "title": "synthetic",
+          "why": "synthetic",
+          "remarkIndexes": [
+            0
+          ]
+        },
+        {
+          "title": "synthetic",
+          "why": "synthetic",
+          "remarkIndexes": [
+            0
+          ]
+        },
+        {
+          "title": "synthetic",
+          "why": "synthetic",
+          "remarkIndexes": [
+            0
+          ]
+        }
+      ],
+      "practiceDrafts": [
+        {
+          "title": "synthetic",
+          "why": "synthetic",
+          "remarkIndexes": [
+            0
+          ]
+        }
+      ],
+      "noteDraft": {
+        "text": "synthetic",
+        "why": "synthetic"
+      }
+    }
+  },
+  {
+    "schema": "PlanModelOutput",
+    "label": "model wrote coach words",
+    "value": {
+      "coachSpeaker": "synthetic",
+      "remarks": [
+        {
+          "turnIds": [
+            "synthetic"
+          ],
+          "aboutSubject": "yes",
+          "kind": "feedback",
+          "aboutHint": "synthetic",
+          "coachWords": "invented"
+        }
+      ],
+      "focusDrafts": [
+        {
+          "title": "synthetic",
+          "why": "synthetic",
+          "remarkIndexes": [
+            0
+          ]
+        }
+      ],
+      "practiceDrafts": [
+        {
+          "title": "synthetic",
+          "why": "synthetic",
+          "remarkIndexes": [
+            0
+          ]
+        }
+      ],
+      "noteDraft": {
+        "text": "synthetic",
+        "why": "synthetic"
+      }
+    }
+  }
+]

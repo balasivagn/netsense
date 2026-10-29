@@ -1,0 +1,31 @@
+{
+  "valid": {
+    "remarkId": "synthetic",
+    "coachWords": "synthetic",
+    "atMs": 0,
+    "subjectRole": "batter",
+    "frames": [
+      {
+        "idx": 0,
+        "ms": 0,
+        "key": "synthetic"
+      }
+    ],
+    "previousRemarkAtMs": 0
+  },
+  "invalid": {
+    "remarkId": "synthetic",
+    "coachWords": "synthetic",
+    "atMs": 0,
+    "subjectRole": "batter",
+    "frames": [
+      {
+        "idx": 0,
+        "ms": 0,
+        "key": "synthetic"
+      }
+    ],
+    "previousRemarkAtMs": 0,
+    "unexpected": true
+  }
+}

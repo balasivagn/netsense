@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "RenderInput.json",
+  "title": "RenderInput",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "preview",
+        "final"
+      ]
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "video",
+        "stills"
+      ]
+    },
+    "proxyKey": {
+      "type": "string"
+    },
+    "durationMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "segmentId": {
+            "type": "string"
+          },
+          "startMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "endMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "annotationIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "segmentId",
+          "startMs",
+          "endMs",
+          "annotationIds",
+          "hash"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "annotations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "annotationId": {
+            "type": "string"
+          },
+          "markType": {
+            "$ref": "Common.json#/$defs/MarkType"
+          },
+          "anchor": {
+            "$ref": "Common.json#/$defs/Anchor"
+          },
+          "arrowFrom": {
+            "anyOf": [
+              {
+                "$ref": "Common.json#/$defs/ArrowFrom"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "endMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "labelText": {
+            "type": "string"
+          },
+          "placedBy": {
+            "type": "string",
+            "enum": [
+              "ai",
+              "coach"
+            ]
+          },
+          "trackFileRef": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "annotationId",
+          "markType",
+          "anchor",
+          "arrowFrom",
+          "startMs",
+          "endMs",
+          "labelText",
+          "placedBy",
+          "trackFileRef"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "previousSegments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "segmentId": {
+            "type": "string"
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "segmentId",
+          "hash",
+          "key"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "kind",
+    "mode",
+    "proxyKey",
+    "durationMs",
+    "segments",
+    "annotations",
+    "previousSegments"
+  ],
+  "additionalProperties": false
+}

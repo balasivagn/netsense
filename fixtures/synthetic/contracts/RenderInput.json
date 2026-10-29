@@ -1,0 +1,77 @@
+{
+  "valid": {
+    "kind": "preview",
+    "mode": "video",
+    "proxyKey": "synthetic",
+    "durationMs": 0,
+    "segments": [
+      {
+        "segmentId": "synthetic",
+        "startMs": 0,
+        "endMs": 0,
+        "annotationIds": [
+          "synthetic"
+        ],
+        "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "annotations": [
+      {
+        "annotationId": "synthetic",
+        "markType": "circle",
+        "anchor": "box_center",
+        "arrowFrom": "left",
+        "startMs": 0,
+        "endMs": 0,
+        "labelText": "synthetic",
+        "placedBy": "ai",
+        "trackFileRef": "synthetic"
+      }
+    ],
+    "previousSegments": [
+      {
+        "segmentId": "synthetic",
+        "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+        "key": "synthetic"
+      }
+    ]
+  },
+  "invalid": {
+    "kind": "preview",
+    "mode": "video",
+    "proxyKey": "synthetic",
+    "durationMs": 0,
+    "segments": [
+      {
+        "segmentId": "synthetic",
+        "startMs": 0,
+        "endMs": 0,
+        "annotationIds": [
+          "synthetic"
+        ],
+        "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "annotations": [
+      {
+        "annotationId": "synthetic",
+        "markType": "circle",
+        "anchor": "box_center",
+        "arrowFrom": "left",
+        "startMs": 0,
+        "endMs": 0,
+        "labelText": "synthetic",
+        "placedBy": "ai",
+        "trackFileRef": "synthetic"
+      }
+    ],
+    "previousSegments": [
+      {
+        "segmentId": "synthetic",
+        "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+        "key": "synthetic"
+      }
+    ],
+    "unexpected": true
+  }
+}

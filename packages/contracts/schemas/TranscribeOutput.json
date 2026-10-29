@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "TranscribeOutput.json",
+  "title": "TranscribeOutput",
+  "type": "object",
+  "properties": {
+    "turns": {
+      "type": "array",
+      "items": {
+        "$ref": "Common.json#/$defs/Turn"
+      }
+    },
+    "audioDurationMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "providerSessionIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "turns",
+    "audioDurationMs",
+    "providerSessionIds"
+  ],
+  "additionalProperties": false
+}

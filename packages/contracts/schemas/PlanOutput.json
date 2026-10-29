@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "PlanOutput.json",
+  "title": "PlanOutput",
+  "type": "object",
+  "properties": {
+    "remarks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "remarkId": {
+            "type": "string"
+          },
+          "turnIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "aboutSubject": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no",
+              "unclear",
+              "general"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "feedback",
+              "instruction",
+              "praise",
+              "other"
+            ]
+          },
+          "aboutHint": {
+            "type": "string"
+          },
+          "atMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "coachWords": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "remarkId",
+          "turnIds",
+          "aboutSubject",
+          "kind",
+          "aboutHint",
+          "atMs",
+          "coachWords"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "fanOut": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "remarkId": {
+            "type": "string"
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "moment",
+                "subject",
+                "track",
+                "place",
+                "check"
+              ]
+            },
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "remarkId",
+          "stages"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "drafts": {
+      "type": "object",
+      "properties": {
+        "focus": {
+          "type": "array",
+          "items": {
+            "$ref": "Common.json#/$defs/Draft"
+          },
+          "maxItems": 2
+        },
+        "practice": {
+          "type": "array",
+          "items": {
+            "$ref": "Common.json#/$defs/Draft"
+          }
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "why": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "ai_draft"
+                  ]
+                },
+                "approved": {
+                  "type": "boolean",
+                  "const": false
+                }
+              },
+              "required": [
+                "text",
+                "why",
+                "source",
+                "approved"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "focus",
+        "practice",
+        "note"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "remarks",
+    "fanOut",
+    "drafts"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,33 @@
+{
+  "valid": {
+    "turns": [
+      {
+        "turnId": "synthetic",
+        "startMs": 0,
+        "endMs": 0,
+        "speaker": "synthetic",
+        "text": "synthetic"
+      }
+    ],
+    "audioDurationMs": 0,
+    "providerSessionIds": [
+      "synthetic"
+    ]
+  },
+  "invalid": {
+    "turns": [
+      {
+        "turnId": "synthetic",
+        "startMs": 0,
+        "endMs": 0,
+        "speaker": "synthetic",
+        "text": "synthetic"
+      }
+    ],
+    "audioDurationMs": 0,
+    "providerSessionIds": [
+      "synthetic"
+    ],
+    "unexpected": true
+  }
+}

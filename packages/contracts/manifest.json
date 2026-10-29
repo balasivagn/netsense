@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "foundationSourceDigests": [
+    {
+      "path": "config/pipeline_config.v1.json",
+      "sha256": "5004a2d99cedd5e1af30a4d3ff59c52822cc263945c7645295f13d129859d082"
+    },
+    {
+      "path": "convex/coaches.ts",
+      "sha256": "6c2396188ff3326fa83b48a18a630ece47b4723187dbf159226314868af53051"
+    },
+    {
+      "path": "convex/config.ts",
+      "sha256": "f73b286c851401367feacd54f31b7a7f00ea9512b6c6ab2713475235ce7b6399"
+    },
+    {
+      "path": "convex/errorCodes.ts",
+      "sha256": "fd91e5b608af64a9c7fc2d69dd618cb095e0e737cdd63c9c2d26ff239f08609e"
+    },
+    {
+      "path": "convex/jobs.ts",
+      "sha256": "c6672775affea549442d1b8f54a26c078fe1f464b4bef653d78ed2680bffb147"
+    },
+    {
+      "path": "convex/lib/auth.ts",
+      "sha256": "0c2964fddf5cb2c23ea559c364c40a1e8fbe89ea817d1e6accfa83a04f5b17d8"
+    },
+    {
+      "path": "convex/schema.ts",
+      "sha256": "87cb80dec10df413e0c6a589fa8dad50958f7f4d08ee5db7331bd3bd7b7ebd06"
+    },
+    {
+      "path": "convex/sessions.ts",
+      "sha256": "0eea843b317c0f3c1f5b751fc5519a2dec75448e17763138fbbc7685998669ed"
+    },
+    {
+      "path": "convex/stageRuns.ts",
+      "sha256": "b5b146d4479e928abf86f9936f292e523c72503be36b7c73eaf14a335af5b4df"
+    },
+    {
+      "path": "convex/students.ts",
+      "sha256": "cf616fb021dbd7951b39e7db6f22bed77bdefae307a34e3c6a8f9c33393d1991"
+    },
+    {
+      "path": "convex/uploads.ts",
+      "sha256": "670a1716edd4da4442f1ff8d8632e739f6339287ee09d471e336aa51f9dc2bb3"
+    },
+    {
+      "path": "convex/validators.ts",
+      "sha256": "e45d4add70b581c712967090cd00bd9d5a11453d558265547fe16c993bb95a23"
+    }
+  ],
+  "algorithm": "sha256(filename + source bytes, sorted filenames)",
+  "digest": "51a8bd5650004181dcdb0ede8c9231fb083e8f6470e976ba0a4e0a7fbc7c0078",
+  "schemas": [
+    "CheckInput",
+    "CheckOutput",
+    "Common",
+    "CriticModelOutput",
+    "ErrorCode",
+    "MomentInput",
+    "MomentModelOutput",
+    "MomentOutput",
+    "NextFocusModelOutput",
+    "PipelineConfig",
+    "PlaceInput",
+    "PlaceModelOutput",
+    "PlaceOutput",
+    "PlanInput",
+    "PlanModelOutput",
+    "PlanOutput",
+    "Provenance",
+    "RenderInput",
+    "RenderOutput",
+    "StageRun",
+    "Subject",
+    "SubjectAnchorInput",
+    "SubjectAnchorOutput",
+    "SubjectInput",
+    "SubjectModelOutput",
+    "SubjectOutput",
+    "SubjectRole",
+    "TrackFile",
+    "TrackInput",
+    "TrackOutput",
+    "TranscodeInput",
+    "TranscodeOutput",
+    "TranscribeInput",
+    "TranscribeOutput"
+  ]
+}

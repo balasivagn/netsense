@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "CheckOutput.json",
+  "title": "CheckOutput",
+  "type": "object",
+  "properties": {
+    "remarkId": {
+      "type": "string"
+    },
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "markId": {
+            "type": "string"
+          },
+          "pass": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "no_player",
+              "subject_swap",
+              "low_coverage",
+              "outside_moment",
+              "label_mismatch",
+              "label_too_long"
+            ]
+          }
+        },
+        "required": [
+          "markId",
+          "pass",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "remarkStatus": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "player_missing"
+      ]
+    }
+  },
+  "required": [
+    "remarkId",
+    "verdicts",
+    "remarkStatus"
+  ],
+  "additionalProperties": false
+}

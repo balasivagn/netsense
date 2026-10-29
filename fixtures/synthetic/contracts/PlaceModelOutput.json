@@ -1,0 +1,45 @@
+{
+  "valid": {
+    "marks": [
+      {
+        "markType": "circle",
+        "anchor": "box_center",
+        "arrowFrom": "left",
+        "startOffsetMs": 0,
+        "endOffsetMs": 0,
+        "label": {
+          "kind": "coach_span",
+          "span": {
+            "turnId": "synthetic",
+            "start": 0,
+            "end": 0
+          },
+          "neutral": "Batter"
+        }
+      }
+    ],
+    "why": "synthetic"
+  },
+  "invalid": {
+    "marks": [
+      {
+        "markType": "circle",
+        "anchor": "box_center",
+        "arrowFrom": "left",
+        "startOffsetMs": 0,
+        "endOffsetMs": 0,
+        "label": {
+          "kind": "coach_span",
+          "span": {
+            "turnId": "synthetic",
+            "start": 0,
+            "end": 0
+          },
+          "neutral": "Batter"
+        }
+      }
+    ],
+    "why": "synthetic",
+    "unexpected": true
+  }
+}

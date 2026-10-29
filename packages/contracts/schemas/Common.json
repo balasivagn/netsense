@@ -1,0 +1,465 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "Common.json",
+  "title": "Common",
+  "$defs": {
+    "SubjectRole": {
+      "type": "string",
+      "enum": [
+        "batter",
+        "bowler",
+        "other"
+      ]
+    },
+    "Subject": {
+      "type": "object",
+      "properties": {
+        "frameMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "point": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "y": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "batter",
+            "bowler",
+            "other"
+          ]
+        },
+        "selectedBy": {
+          "type": "string",
+          "enum": [
+            "coach"
+          ]
+        },
+        "selectedAt": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "frameMs",
+        "point",
+        "role",
+        "selectedBy",
+        "selectedAt"
+      ],
+      "additionalProperties": false
+    },
+    "Point": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "additionalProperties": false
+    },
+    "Box": {
+      "type": "object",
+      "properties": {
+        "x1": {
+          "type": "number",
+          "minimum": 0
+        },
+        "y1": {
+          "type": "number",
+          "minimum": 0
+        },
+        "x2": {
+          "type": "number",
+          "minimum": 0
+        },
+        "y2": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "x1",
+        "y1",
+        "x2",
+        "y2"
+      ],
+      "additionalProperties": false
+    },
+    "TextSpan": {
+      "type": "object",
+      "properties": {
+        "turnId": {
+          "type": "string"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "turnId",
+        "start",
+        "end"
+      ],
+      "additionalProperties": false,
+      "description": "UTF-16 code unit offsets into immutable transcriptTurns.text. Code checks boundaries, start < end, and verbatim copy; models return spans only."
+    },
+    "MarkType": {
+      "type": "string",
+      "enum": [
+        "circle",
+        "arrow",
+        "highlight",
+        "label"
+      ]
+    },
+    "Anchor": {
+      "type": "string",
+      "enum": [
+        "box_center",
+        "box_top",
+        "box_bottom",
+        "box_left",
+        "box_right"
+      ]
+    },
+    "ArrowFrom": {
+      "type": "string",
+      "enum": [
+        "left",
+        "right",
+        "above",
+        "below"
+      ]
+    },
+    "NeutralLabel": {
+      "type": "string",
+      "enum": [
+        "Batter",
+        "Bowler",
+        "Player",
+        "Remark"
+      ]
+    },
+    "Provenance": {
+      "type": "object",
+      "properties": {
+        "configVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stageRunIds": {
+          "type": "object",
+          "patternProperties": {
+            "^(moment|subject|track|place|check)$": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "workers": {
+          "type": "object",
+          "patternProperties": {
+            "^(moment|subject|track|place|check)$": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "modelVersions": {
+          "type": "object",
+          "patternProperties": {
+            "^[A-Za-z0-9_.@-]+$": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "placedBy": {
+          "type": "string",
+          "enum": [
+            "ai",
+            "coach"
+          ]
+        },
+        "candidate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "configVersion",
+        "stageRunIds",
+        "workers",
+        "modelVersions",
+        "placedBy",
+        "candidate"
+      ],
+      "additionalProperties": false
+    },
+    "StageKey": {
+      "type": "string",
+      "enum": [
+        "transcode",
+        "transcribe",
+        "plan",
+        "moment",
+        "subject",
+        "track",
+        "place",
+        "check",
+        "render"
+      ]
+    },
+    "WorkerType": {
+      "type": "string",
+      "enum": [
+        "agent",
+        "sub_agent",
+        "model",
+        "tool",
+        "rules"
+      ]
+    },
+    "Provider": {
+      "type": "string",
+      "enum": [
+        "local",
+        "meta",
+        "fake",
+        "gemini",
+        "fireworks",
+        "baseten"
+      ]
+    },
+    "Turn": {
+      "type": "object",
+      "properties": {
+        "turnId": {
+          "type": "string"
+        },
+        "startMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "endMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "speaker": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "turnId",
+        "startMs",
+        "endMs",
+        "speaker",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "Frame": {
+      "type": "object",
+      "properties": {
+        "idx": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "idx",
+        "ms",
+        "key"
+      ],
+      "additionalProperties": false
+    },
+    "AudioChunk": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "offsetMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "key",
+        "offsetMs",
+        "durationMs"
+      ],
+      "additionalProperties": false
+    },
+    "Mark": {
+      "type": "object",
+      "properties": {
+        "markId": {
+          "type": "string"
+        },
+        "markType": {
+          "$ref": "Common.json#/$defs/MarkType"
+        },
+        "anchor": {
+          "$ref": "Common.json#/$defs/Anchor"
+        },
+        "arrowFrom": {
+          "anyOf": [
+            {
+              "$ref": "Common.json#/$defs/ArrowFrom"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "startMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "endMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "labelSpan": {
+          "anyOf": [
+            {
+              "$ref": "Common.json#/$defs/TextSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "labelText": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "neutralLabel": {
+          "anyOf": [
+            {
+              "$ref": "Common.json#/$defs/NeutralLabel"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "markId",
+        "markType",
+        "anchor",
+        "arrowFrom",
+        "startMs",
+        "endMs",
+        "labelSpan",
+        "labelText",
+        "neutralLabel"
+      ],
+      "additionalProperties": false
+    },
+    "Draft": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "why": {
+          "type": "string"
+        },
+        "remarkIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "ai_draft"
+          ]
+        },
+        "approved": {
+          "const": false,
+          "type": "boolean"
+        },
+        "editedByCoach": {
+          "const": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "why",
+        "remarkIds",
+        "source",
+        "approved",
+        "editedByCoach"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "properties": {},
+  "required": [],
+  "additionalProperties": false
+}

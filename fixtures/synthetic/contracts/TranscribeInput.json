@@ -1,0 +1,33 @@
+{
+  "valid": {
+    "audioWavKeys": [
+      {
+        "key": "synthetic",
+        "offsetMs": 0,
+        "durationMs": 0
+      }
+    ],
+    "keywords": [
+      "synthetic"
+    ],
+    "languageBias": [
+      "synthetic"
+    ]
+  },
+  "invalid": {
+    "audioWavKeys": [
+      {
+        "key": "synthetic",
+        "offsetMs": 0,
+        "durationMs": 0
+      }
+    ],
+    "keywords": [
+      "synthetic"
+    ],
+    "languageBias": [
+      "synthetic"
+    ],
+    "unexpected": true
+  }
+}

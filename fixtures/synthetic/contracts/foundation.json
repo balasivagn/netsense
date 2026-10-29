@@ -1,0 +1,106 @@
+{
+  "identity": {
+    "subject": "synthetic-coach-a",
+    "name": "Synthetic coach A"
+  },
+  "otherIdentity": {
+    "subject": "synthetic-coach-b",
+    "name": "Synthetic coach B"
+  },
+  "studentLabel": "Synthetic student",
+  "subject": {
+    "frameMs": 1000,
+    "point": {
+      "x": 0.25,
+      "y": 0.75
+    },
+    "role": "batter"
+  },
+  "upload": {
+    "storageKey": "synthetic/source",
+    "driver": "local",
+    "mimeType": "video/mp4",
+    "bytesTotal": 1024,
+    "bytesConfirmed": 0,
+    "partSize": 1024,
+    "partsConfirmed": [],
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "status": "in_progress",
+    "attempts": 1,
+    "createdAt": 1
+  },
+  "remark": {
+    "remarkId": "synthetic-r1",
+    "turnIds": [
+      "synthetic-t1"
+    ],
+    "source": "voice",
+    "aboutSubject": "yes",
+    "kind": "feedback",
+    "atMs": 1000,
+    "mode": "tracked",
+    "status": "pending",
+    "includeInShare": true
+  },
+  "annotation": {
+    "remarkId": "synthetic-r1",
+    "markId": "synthetic-m1",
+    "markType": "circle",
+    "anchor": "box_center",
+    "role": "batter",
+    "startMs": 100,
+    "endMs": 200,
+    "labelText": "Player",
+    "why": "Synthetic placement",
+    "status": "approved",
+    "placedBy": "ai",
+    "provenance": {
+      "configVersion": 1,
+      "stageRunIds": {
+        "moment": "synthetic",
+        "subject": "synthetic",
+        "track": "synthetic",
+        "place": "synthetic",
+        "check": "synthetic"
+      },
+      "workers": {
+        "moment": "synthetic",
+        "subject": "synthetic",
+        "track": "synthetic",
+        "place": "synthetic",
+        "check": "synthetic"
+      },
+      "modelVersions": {},
+      "placedBy": "ai",
+      "candidate": null
+    },
+    "approvedAt": 1,
+    "updatedAt": 1
+  },
+  "run": {
+    "stage": "transcode",
+    "workerId": "transcode.ffmpeg@1",
+    "attempt": 1,
+    "idempotencyKey": "1111111111111111111111111111111111111111111111111111111111111111",
+    "inputHash": "2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "finish": {
+    "status": "done",
+    "outputRef": "synthetic/transcode-output",
+    "samFrames": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "costUsd": 0
+  },
+  "leaseOwner": "synthetic-orchestrator",
+  "anchor": {
+    "box": {
+      "x1": 0,
+      "y1": 0,
+      "x2": 10,
+      "y2": 10
+    },
+    "frameMs": 1000,
+    "referenceCropKey": "synthetic"
+  }
+}

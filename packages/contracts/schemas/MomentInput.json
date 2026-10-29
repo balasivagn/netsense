@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "MomentInput.json",
+  "title": "MomentInput",
+  "type": "object",
+  "properties": {
+    "remarkId": {
+      "type": "string"
+    },
+    "coachWords": {
+      "type": "string"
+    },
+    "atMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "subjectRole": {
+      "$ref": "Common.json#/$defs/SubjectRole"
+    },
+    "frames": {
+      "type": "array",
+      "items": {
+        "$ref": "Common.json#/$defs/Frame"
+      },
+      "maxItems": 26
+    },
+    "previousRemarkAtMs": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "remarkId",
+    "coachWords",
+    "atMs",
+    "subjectRole",
+    "frames",
+    "previousRemarkAtMs"
+  ],
+  "additionalProperties": false
+}

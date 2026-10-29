@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "PlanInput.json",
+  "title": "PlanInput",
+  "type": "object",
+  "properties": {
+    "session": {
+      "type": "object",
+      "properties": {
+        "studentLabel": {
+          "type": "string"
+        },
+        "subjectRole": {
+          "$ref": "Common.json#/$defs/SubjectRole"
+        }
+      },
+      "required": [
+        "studentLabel",
+        "subjectRole"
+      ],
+      "additionalProperties": false
+    },
+    "turns": {
+      "type": "array",
+      "items": {
+        "$ref": "Common.json#/$defs/Turn"
+      }
+    }
+  },
+  "required": [
+    "session",
+    "turns"
+  ],
+  "additionalProperties": false
+}

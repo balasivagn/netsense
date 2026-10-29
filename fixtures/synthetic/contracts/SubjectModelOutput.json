@@ -1,0 +1,13 @@
+{
+  "valid": {
+    "boxNumber": 0,
+    "why": "synthetic",
+    "confidence": "high"
+  },
+  "invalid": {
+    "boxNumber": 0,
+    "why": "synthetic",
+    "confidence": "high",
+    "unexpected": true
+  }
+}

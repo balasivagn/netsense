@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "TranscribeInput.json",
+  "title": "TranscribeInput",
+  "type": "object",
+  "properties": {
+    "audioWavKeys": {
+      "type": "array",
+      "items": {
+        "$ref": "Common.json#/$defs/AudioChunk"
+      }
+    },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "languageBias": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "audioWavKeys",
+    "keywords",
+    "languageBias"
+  ],
+  "additionalProperties": false
+}

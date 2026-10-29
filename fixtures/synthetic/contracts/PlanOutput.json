@@ -1,0 +1,117 @@
+{
+  "valid": {
+    "remarks": [
+      {
+        "remarkId": "synthetic",
+        "turnIds": [
+          "synthetic"
+        ],
+        "aboutSubject": "yes",
+        "kind": "feedback",
+        "aboutHint": "synthetic",
+        "atMs": 0,
+        "coachWords": "synthetic"
+      }
+    ],
+    "fanOut": [
+      {
+        "remarkId": "synthetic",
+        "stages": [
+          "moment"
+        ]
+      }
+    ],
+    "drafts": {
+      "focus": [
+        {
+          "id": "synthetic",
+          "title": "synthetic",
+          "why": "synthetic",
+          "remarkIds": [
+            "synthetic"
+          ],
+          "source": "ai_draft",
+          "approved": false,
+          "editedByCoach": false
+        }
+      ],
+      "practice": [
+        {
+          "id": "synthetic",
+          "title": "synthetic",
+          "why": "synthetic",
+          "remarkIds": [
+            "synthetic"
+          ],
+          "source": "ai_draft",
+          "approved": false,
+          "editedByCoach": false
+        }
+      ],
+      "note": {
+        "text": "synthetic",
+        "why": "synthetic",
+        "source": "ai_draft",
+        "approved": false
+      }
+    }
+  },
+  "invalid": {
+    "remarks": [
+      {
+        "remarkId": "synthetic",
+        "turnIds": [
+          "synthetic"
+        ],
+        "aboutSubject": "yes",
+        "kind": "feedback",
+        "aboutHint": "synthetic",
+        "atMs": 0,
+        "coachWords": "synthetic"
+      }
+    ],
+    "fanOut": [
+      {
+        "remarkId": "synthetic",
+        "stages": [
+          "moment"
+        ]
+      }
+    ],
+    "drafts": {
+      "focus": [
+        {
+          "id": "synthetic",
+          "title": "synthetic",
+          "why": "synthetic",
+          "remarkIds": [
+            "synthetic"
+          ],
+          "source": "ai_draft",
+          "approved": false,
+          "editedByCoach": false
+        }
+      ],
+      "practice": [
+        {
+          "id": "synthetic",
+          "title": "synthetic",
+          "why": "synthetic",
+          "remarkIds": [
+            "synthetic"
+          ],
+          "source": "ai_draft",
+          "approved": false,
+          "editedByCoach": false
+        }
+      ],
+      "note": {
+        "text": "synthetic",
+        "why": "synthetic",
+        "source": "ai_draft",
+        "approved": false
+      }
+    },
+    "unexpected": true
+  }
+}
