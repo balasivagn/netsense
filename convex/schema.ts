@@ -58,6 +58,8 @@ export default defineSchema({
       v.literal("in_page"),
     ),
     renderMode: renderMode,
+    consentConfirmedAt: v.optional(v.number()),
+    consentConfirmedBy: v.optional(v.string()),
     isDemoFallback: v.boolean(),
     status: v.union(
       v.literal("draft"),

@@ -28,6 +28,8 @@ Dates are 2026, Singapore time (SGT, UTC+8). Today is Wed 28 Oct.
 
 | Decision | By | Notes |
 |---|---|---|
+| Screen 07a may extract selection frames server-side after upload and before the subject tap when the phone cannot decode the clip. This exception is limited to selection frames; analysis and tracking still wait for the confirmed tap. | Bala, 28 Oct 2026 (explicit approval in the build conversation) | Resolves the server-keyframe fallback vs tap-gate contradiction. SPEC foundation clarifications; T1.35 implementation and tests remain pending. |
+| After initial anchor failure and a new coach tap, subject-retrack reuses completed outputs and computes only missing per-remark moments after the new anchor succeeds. | Bala, 28 Oct 2026 (explicit approval in the build conversation) | Resolves missing stage-3 prerequisites without a full pipeline restart. T1.09 implementation/tests pending; no outputs are fabricated. |
 | instabox VM hosts app server and orchestrator | Bala | SPEC §5 |
 | Convex for data and real-time status; Clerk for auth | Bala | SPEC §9, §13 |
 | One ephemeral Modal Sandbox per uploaded video; always released; final render in a fresh sandbox | Bala (R10) | SPEC §11; UNTESTED until T0.4 |

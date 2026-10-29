@@ -55,6 +55,24 @@ export const setRenderMode = mutation({
     await ctx.db.patch(args.sessionId, { renderMode: args.renderMode });
   },
 });
+export const confirmConsent = mutation({
+  args: { sessionId: v.id("sessions") },
+  handler: async (ctx, args) => {
+    const session = await ownedSession(ctx, args.sessionId);
+    if (
+      session.consentConfirmedAt !== undefined ||
+      session.consentConfirmedBy !== undefined
+    )
+      return;
+    // ownedSession has already required an authenticated, registered coach.
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw Error("UNAUTHENTICATED");
+    await ctx.db.patch(session._id, {
+      consentConfirmedAt: Date.now(),
+      consentConfirmedBy: identity.subject,
+    });
+  },
+});
 export const setSubject = mutation({
   args: { sessionId: v.id("sessions"), frameMs: v.number(), point, role },
   handler: async (ctx, args) => {

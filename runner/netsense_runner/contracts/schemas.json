@@ -601,6 +601,7 @@
     "title": "ErrorCode",
     "type": "string",
     "enum": [
+      "CONSENT_REQUIRED",
       "UPLOAD_PART_FAILED",
       "UPLOAD_CHECKSUM",
       "UPLOAD_SIZE_MISMATCH",

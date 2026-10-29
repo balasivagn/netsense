@@ -11,6 +11,7 @@ from pydantic import Field, RootModel
 class ErrorCode(
     RootModel[
         Literal[
+            "CONSENT_REQUIRED",
             "UPLOAD_PART_FAILED",
             "UPLOAD_CHECKSUM",
             "UPLOAD_SIZE_MISMATCH",
@@ -44,6 +45,7 @@ class ErrorCode(
 ):
     root: Annotated[
         Literal[
+            "CONSENT_REQUIRED",
             "UPLOAD_PART_FAILED",
             "UPLOAD_CHECKSUM",
             "UPLOAD_SIZE_MISMATCH",
