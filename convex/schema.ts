@@ -418,6 +418,12 @@ export default defineSchema({
     notes: v.array(note),
     focusPoints: v.array(focus),
     practice: v.array(focus),
+    // Mutable lesson choices deliberately live outside the frozen plan output.
+    // Optional fields keep rows persisted before Screen 21 readable.
+    revision: v.optional(v.string()),
+    dismissedFocusIds: v.optional(v.array(v.string())),
+    dismissedPracticeIds: v.optional(v.array(v.string())),
+    dismissedAiNote: v.optional(v.boolean()),
     nextSessionFocus: v.optional(
       v.object({
         title: v.string(),

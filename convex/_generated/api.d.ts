@@ -18,6 +18,7 @@ import type * as coaches from "../coaches.js";
 import type * as config from "../config.js";
 import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
+import type * as lessons from "../lessons.js";
 import type * as persistenceValidators from "../persistenceValidators.js";
 import type * as pipeline from "../pipeline.js";
 import type * as playback from "../playback.js";
@@ -44,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   config: typeof config;
   http: typeof http;
   jobs: typeof jobs;
+  lessons: typeof lessons;
   persistenceValidators: typeof persistenceValidators;
   pipeline: typeof pipeline;
   playback: typeof playback;

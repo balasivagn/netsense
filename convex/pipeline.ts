@@ -369,6 +369,11 @@ export const persistPlan = endpoint(
     if (!old) await ctx.db.insert("lessons", data);
     else {
       requireValid(old.coachId === s.job.coachId);
+      // Screen 21 records removals separately from the frozen plan output. A
+      // worker replay may refresh drafts, but it must never resurrect a choice
+      // the coach dismissed.
+      const dismissedFocusIds = new Set(old.dismissedFocusIds ?? []);
+      const dismissedPracticeIds = new Set(old.dismissedPracticeIds ?? []);
       const keepFocus = old.focusPoints.filter(
           (d) => d.source === "coach" || d.approved || d.editedByCoach,
         ),
@@ -379,16 +384,24 @@ export const persistPlan = endpoint(
         focusPoints: [
           ...keepFocus,
           ...o.drafts.focus.filter(
-            (d) => !keepFocus.some((x) => x.id === d.id),
+            (d) =>
+              !dismissedFocusIds.has(d.id) &&
+              !keepFocus.some((x) => x.id === d.id),
           ),
         ],
         practice: [
           ...keepPractice,
           ...o.drafts.practice.filter(
-            (d) => !keepPractice.some((x) => x.id === d.id),
+            (d) =>
+              !dismissedPracticeIds.has(d.id) &&
+              !keepPractice.some((x) => x.id === d.id),
           ),
         ],
-        notes: old.notes.length ? old.notes : data.notes,
+        notes: old.notes.length
+          ? old.notes
+          : old.dismissedAiNote
+            ? []
+            : data.notes,
       });
     }
   },

@@ -137,9 +137,18 @@ export async function projectPlayback(
     .withIndex("by_sessionId", (q) => q.eq("sessionId", s._id))
     .collect();
   const lesson = lessons.find((l) => l.coachId === s.coachId);
+  const dismissedFocusIds = new Set(lesson?.dismissedFocusIds ?? []);
+  const dismissedPracticeIds = new Set(lesson?.dismissedPracticeIds ?? []);
   return {
     ownerUserId: coach.clerkUserId,
-    suggestions: [...(lesson?.focusPoints ?? []), ...(lesson?.practice ?? [])]
+    suggestions: [
+      ...(lesson?.focusPoints ?? []).filter(
+        (x) => !dismissedFocusIds.has(x.id),
+      ),
+      ...(lesson?.practice ?? []).filter(
+        (x) => !dismissedPracticeIds.has(x.id),
+      ),
+    ]
       .filter((x) => x.source === "ai_draft")
       .map((x) => ({
         id: x.id,
