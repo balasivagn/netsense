@@ -35,11 +35,11 @@
     },
     {
       "path": "convex/pipeline.ts",
-      "sha256": "e5b40c235f13815637374cccc955edd9311f7d4f7222ae1a0523644240792863"
+      "sha256": "dbec99e4d7a0333e4c9af54443d7551af8e388ecbedb29ba5fcab3a8a5551409"
     },
     {
       "path": "convex/schema.ts",
-      "sha256": "f629d638d0706079bff66bfbe00966f71394ec7a901a64041ea544b3e04c9416"
+      "sha256": "70c4f1069924499b84c7c24c8951f9cc7779e3c8275aeeb7bb98ddf7d70987af"
     },
     {
       "path": "convex/sessions.ts",
